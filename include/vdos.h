@@ -20,6 +20,7 @@ int ConfGetInt(const char *name);
 char * ConfGetString(const char *name);
 void ConfAddError(char* desc, char* errLine);
 void vDOS_Init(void);
+void vDos_LoadConfig(void);
 
 extern HWND	sdlHwnd;
 
@@ -29,6 +30,10 @@ extern HWND	sdlHwnd;
 #define txtMaxLins	60
 
 #define DOS_FILES 255
+
+#ifdef WITHIRQ1
+extern bool useIrq1;
+#endif
 
 extern int winHide10th;
 extern bool winHidden;

@@ -87,7 +87,11 @@
 
 void BIOS_PasteClipboard(Bit16u * data);											// To paste Windows clipboard to keyboard buffer
 bool BIOS_AddKeyToBuffer(Bit16u code);
+
 void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed);
+#ifdef WITHIRQ1
+void Rudimentary_int09_handler(Bit8u scancode);
+#endif
 bool BIOS_CheckKey(Bit16u &code);
 
 void BIOS_SetComPorts (Bit16u baseaddr[]);
