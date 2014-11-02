@@ -8,10 +8,11 @@ This fork is ONLY suitable for use with the XY3 text editor. For all other uses,
 
 This fork tracks the master source code of the vDos project and adds the following features:
 
-Implement full IRQ1/INT9 keyboard handling, necessary for all XY3 functionality to work. NOTE: you MUST add KBXY3 = ON to your config.txt to activate the modified keyboard handling.
+* Implement full IRQ1/INT9 keyboard handling, necessary for all XY3 functionality to work. **NOTE:** you can disable this by adding KBXY3 = OFF to your config.txt.
 
-Implement very rough sound support for XY3. NOTE: you MUST add BEEPXY3 = ON to your config.txt to activate the sound support.
+* Implement very rough sound support for XY3. **NOTE:** you can disable this by adding BEEPXY3 = OFF to your config.txt.
 
+* Implement support for short file name versions of long filenames. **NOTE:** you can disable this by adding SFN83 = OFF to your config.txt.
 
 
 ---

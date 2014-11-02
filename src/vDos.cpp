@@ -283,10 +283,16 @@ static void ConfShowErrors()
 void vDos_LoadConfig(void)
 	{
 #ifdef WITHIRQ1
-	ConfAddBool("kbxy3", false);
+	//Option to disable the full IRQ1 keyboard handling
+	ConfAddBool("kbxy3", true);
 #endif
 #ifdef BEEP
-	ConfAddBool("beepxy3", false);
+	//Option to disable the rudimentary sound support
+	ConfAddBool("beepxy3", true);
+#endif
+#ifdef SFN83
+	//Option to disable support for short (8.3) file names.
+	ConfAddBool("sfn83", true);
 #endif
 	ConfAddInt("scale", 0);
 	ConfAddString("window", "");

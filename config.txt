@@ -1,11 +1,16 @@
 rem vDos has some configuration options, you set them in this file.
 rem Don't try to include DOS config.sys settings like KEYB=, that won't work!
 
-rem Activate full keyboard handling, necessary for XY3
-KBXY3 = ON
+rem Deactivate special keyboard handling necessary for XY3
+rem If you need this, you would probably be better of uding the original vDos
+rem KBXY3 = OFF
 
-rem Activate rudimentary sound support for XY3
-BEEPXY3 = ON
+rem Deactivate rudimentary sound support for XY3
+rem BEEPXY3 = OFF
+
+rem Deactivate short file name support for long file names
+rem SFN83 = OFF
+
 
 REM Memory
 REM ======
