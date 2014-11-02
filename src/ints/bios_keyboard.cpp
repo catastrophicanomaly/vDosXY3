@@ -1,5 +1,8 @@
 #include "vDos.h"
 #include "callback.h"
+#ifdef WITHIRQ1
+#include "pic.h"
+#endif
 #include "mem.h"
 #include "bios.h"
 #include "regs.h"
@@ -218,6 +221,7 @@ void UpdateKBflags()																// At least L.Shift + R.Shift are not captur
 	Mem_aStosb(BIOS_KEYBOARD_LEDS, leds);
 	}
 
+
 void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed)
 	{
 	// We should call Int 0x15, to inform programs that has redirected this
@@ -337,6 +341,132 @@ void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed)
 	return;
 	}
 
+#ifdef WITHIRQ1
+void Rudimentary_int09_handler(Bit8u scancode)
+	{
+	// We should call Int 0x15, to inform programs that has redirected this
+//	reg_ah = 0x4f;									// KEYBOARD INTERCEPT (translate scancode)
+//	reg_al = scancode;
+//	CALLBACK_SCF(true);								// Wrong, should be setting the falg directly
+
+
+	//PIC_ActivateIRQ(1);
+
+	UpdateKBflags();
+/*	if (!pressed)
+		{
+		if (scancode == 0x38)														// Alt Released
+			{
+			add_key(Mem_Lodsb(BIOS_KEYBOARD_TOKEN));
+			Mem_Stosb(BIOS_KEYBOARD_TOKEN, 0);
+			}
+		return;
+		}
+		*/
+	/*
+	if (symcode >= SDLK_KP0 && symcode <= SDLK_KP9 && (flags1&0x08))				// NumPad 0-9 + ALt down
+		{
+		Bit8u token = Mem_Lodsb(BIOS_KEYBOARD_TOKEN);
+		token = token*10+symcode-SDLK_KP0;
+		Mem_Stosb(BIOS_KEYBOARD_TOKEN, token);
+		return;
+		}
+		*/
+	Mem_Stosb(BIOS_KEYBOARD_TOKEN, 0);												// Reset if another key
+// Look at this (Control Break):
+//      if (scancode == 0x46) {
+//			CPU_HW_Interrupt(0x1b);
+//			return;
+//		}
+
+	if (scancode >= 0x3b && scancode <= 0x44)										// F1 - F10
+		{
+		if (flags1 & 0x08)															// Alt down
+			scancode += 45;
+		else if (flags1 & 0x04)														// Ctrl down
+			scancode += 35;
+		else if (flags1 & 0x03)														// Either shift down
+			scancode += 25;
+		add_key(scancode<<8);
+		return;
+		}
+
+	if (scancode == 0x57 || scancode == 0x58)										// F11 + F12
+		{
+		scancode += 0x2e;
+		if (flags1&0x08)															// Alt down
+			scancode += 6;
+		else if (flags1&0x04)														// Ctrl down
+			scancode += 4;
+		else if (flags1&0x03)														// Either shift down
+			scancode += 2;
+		add_key(scancode<<8);
+		return;
+		}
+
+	if (scancode == 0x0f && !(flags1&0x08))											// Tab w/o Alt down
+		{
+		if (flags1 & 0x04)															// Ctrl down
+			add_key(0x9400);
+		else if (flags1 & 0x03)														// Either shift down
+			add_key(0x0f00);
+		else
+			add_key(0x0f09);
+		return;
+		}
+
+//	if (scancode == 6 && (flags1&0x0c) == 0x0c)										// Set unicode if Ctrl+Alt+5 (€)
+//		unicode = 0x20ac;
+//	else if (flags1&0x08)															// Alt down
+//	else if (flags2&0x02)															// Left Alt down
+//	if (flags2&0x03 && !(flags2&0x1))															// Left Alt down w/o Left Ctrl (=Right Alt)
+	if ((flags2&0x03) == 2)															// Left Alt down w/o Left Ctrl (=Right Alt)
+		{
+		if (scancode >= 2 && scancode <= 13)										// Top row '1' - '='
+			return add_key((scancode+0x76)<<8);
+		//if (unicode)																// Character
+		//	return add_key(scancode<<8);
+		}
+	/*
+	if (unicode)																	// If unicode, look up corresponding ascii
+		{
+		for (int i = 1; i < 256; i++)												// Could probably be ommited for unicode < 128 == ascii, what the hack
+			if (cpMap[i] == unicode)
+				return add_key((scancode<<8) + i);
+		if (!(flags1&0x08))															// If Alt not down
+			add_key((scancode<<8) + unicode);
+		return;
+		}
+*/
+	if (scancode >= 0x47 && scancode <= 0x53)										// Arrow keys/NumPad
+		{
+		if (flags1 & 0x08)															// Either Alt down
+			add_key(scan_to_scanascii[scancode].normal+0x5000);
+		else if (flags1 & 0x04)														// Either Control down
+			add_key((scan_to_scanascii[scancode].control&0xff00)|0xe0);
+		else if (((flags1 & 0x3) != 0) || ((flags1 & 0x20) != 0))					// Either Shift down or NumLock
+			add_key((scan_to_scanascii[scancode].shift&0xff00)|0xe0);
+		else
+			add_key((scan_to_scanascii[scancode].normal&0xff00)|0xe0);
+		return;
+		}
+
+	if (scancode <= MAX_SCAN_CODE)													// Fallthru to report some combinations based upon the original IBM keyboard
+		{																			// At least WP checks for instance for [Ctrl]6
+		if (flags1 & 0x08)															// Alt down												
+			add_key(scan_to_scanascii[scancode].alt);
+		else if (flags1 & 0x04)														// Ctrl down
+			add_key(scan_to_scanascii[scancode].control);
+		else if (flags1 & 0x03)														// Either Shift down
+			add_key(scan_to_scanascii[scancode].shift);
+		else
+			add_key(scan_to_scanascii[scancode].normal);							// Last two shouldn't be needed, so what
+		}
+	return;
+	}
+
+#endif
+
 static bool IsEnhancedKey(Bit16u &key)												// Check if key combination is enhanced or not, translate key if necessary
 	{
 	if ((key>>8) == 0xe0)															// Test for special keys (return and slash on numblock)
@@ -435,6 +565,15 @@ static Bitu INT16_Handler(void)
 	return CBRET_NONE;
 	}
 
+#ifdef WITHIRQ1
+static Bitu IRQ1_Handler(void)
+{
+	Bitu scancode = reg_al;	/* Read the code */
+	Rudimentary_int09_handler(scancode);
+	return CBRET_NONE;
+}
+#endif
+
 void BIOS_SetupKeyboard(void)
 	{
 	// Setup the variables for keyboard in the bios data segment
@@ -446,5 +585,14 @@ void BIOS_SetupKeyboard(void)
 	Mem_aStosb(BIOS_KEYBOARD_TOKEN, 0);
 
 	CALLBACK_Install(0x16, &INT16_Handler, CB_INT16);								// Allocate/setup a callback for int 0x16
+	
+#ifdef WITHIRQ1
+	if (useIrq1)
+		{
+		Bitu call_irq1 = CALLBACK_Allocate();
+		CALLBACK_Setup(call_irq1, &IRQ1_Handler, CB_IRQ1, dWord2Ptr(BIOS_DEFAULT_IRQ1_LOCATION));
+		RealSetVec(0x09, BIOS_DEFAULT_IRQ1_LOCATION);
+		}
+#endif
 	}
 

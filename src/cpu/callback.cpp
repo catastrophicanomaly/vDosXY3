@@ -129,6 +129,27 @@ void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
 		Mem_aStosw(physAddress+14, 0x20e6);											// out 0x20, al
 		Mem_aStosw(physAddress+16, 0xcf58);											// pop ax + IRET
 		break;
+#ifdef WITHIRQ1 
+	case CB_IRQ1:	// keyboard int9
+		
+		Mem_aStosw(physAddress + 0, 0x50);						// push ax
+		
+		Mem_aStosw(physAddress + 1, 0x60e4);						// in al, 0x60
+		//Mem_aStosw(physAddress + 3, 0x4fb4);						// mov ah, 0x4f
+		//Mem_aStosw(physAddress + 5, 0xf9);						// stc
+		//Mem_aStosw(physAddress + 6, 0x15cd);						// int 15
+		//Mem_aStosw(physAddress + 0x08, 0x0473);				// jc skip
+		Mem_aStosw(physAddress + 0x3, 0x38FE);				// GRP 4 + Extra Callback instruction
+		Mem_aStosw(physAddress + 0x5, callback);			// The immediate word
+		
+		Mem_aStosw(physAddress + 0x07, 0xfa);						// cli
+		Mem_aStosw(physAddress + 0x08, 0x20b0);					// mov al, 0x20
+		Mem_aStosw(physAddress + 0x0a, 0x20e6);					// out 0x20, al
+		Mem_aStosw(physAddress + 0x0c, 0xcf58);					// pop ax + IRET
+		
+
+		break;
+#endif
 	case CB_IRQ9:																	// Pic cascade interrupt
 		Mem_aStosb(physAddress+0, 0x50);											// push ax
 		Mem_aStosw(physAddress+1, 0x61b0);											// mov al, 0x61

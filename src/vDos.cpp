@@ -39,6 +39,11 @@ void AUTOEXEC_Init();
 void SHELL_Init();
 void INT10_Init();
 
+
+#ifdef WITHIRQ1
+bool useIrq1 = 0;																	// Should we route keypresses through Irq1/Int9, XY3 needs this
+#endif
+
 static Bit32u mSecsLast = 0;
 int winHide10th = 0;
 bool winHidden = true;
@@ -275,12 +280,14 @@ static void ConfShowErrors()
 		MessageBox(NULL, errorMess+1, "vDos: CONFIG.TXT has unresolved items", MB_OK|MB_ICONWARNING);
 	}
 
-void vDOS_Init(void)
+void vDos_LoadConfig(void)
 	{
-	hideWinTill = GetTickCount()+2500;												// Auto hidden till first keyboard check, parachute at 2.5 secs
-
-	LOG_MSG("vDos version: %s", vDosVersion);
-
+#ifdef WITHIRQ1
+	ConfAddBool("kbxy3", false);
+#endif
+#ifdef BEEP
+	ConfAddBool("beepxy3", false);
+#endif
 	ConfAddInt("scale", 0);
 	ConfAddString("window", "");
 	ConfAddBool("low", false);
@@ -293,6 +300,18 @@ void vDOS_Init(void)
 	ConfAddString("font", "");
 	ConfAddString("wp", "");
 	ParseConfigFile();
+	}
+
+void vDOS_Init(void)
+	{
+	hideWinTill = GetTickCount()+2500;												// Auto hidden till first keyboard check, parachute at 2.5 secs
+
+	LOG_MSG("vDos version: %s", vDosVersion);
+
+#ifndef WITHIRQ1
+	// Wil have been called earlier in starup if WITHIRQ1 is defined
+	vDos_LoadConfig();
+#endif
 
 	GUI_StartUp();
 	IO_Init();

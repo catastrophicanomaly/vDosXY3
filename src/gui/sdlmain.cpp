@@ -17,6 +17,10 @@
 #include "mouse.h"
 #include <Shellapi.h>
 
+#ifdef WITHIRQ1
+void KEYBOARD_AddKey(SDLKey keytype, bool pressed);
+#endif
+
 #define WM_SC_SYSMENUABOUT		0x1110												// Pretty arbitrary, just needs to be < 0xF000
 #define WM_SC_SYSMENUPCOPY		(WM_SC_SYSMENUABOUT + 1)
 #define WM_SC_SYSMENUPASTE		(WM_SC_SYSMENUABOUT + 2)
@@ -1113,57 +1117,69 @@ void GFX_Events()
 					decreaseFontSize();
 				return;
 				}
+#ifdef WITHIRQ1
+			if (!useIrq1)
+			{
+#endif
+				if (event.key.keysym.mod & 3)												// Shifted dead keys reported as unshifted
+					if (event.key.keysym.sym == 39)										// '=> "
+						event.key.keysym.sym = (SDLKey)34;
+					else if (event.key.keysym.sym == 96)								// ` => ~
+						event.key.keysym.sym = (SDLKey)126;
+					else if (event.key.keysym.sym == 54)								// 6 => ^
+						event.key.keysym.sym = (SDLKey)94;
 
-			if (event.key.keysym.mod&3)												// Shifted dead keys reported as unshifted
-				if (event.key.keysym.sym == 39)										// '=> "
-					event.key.keysym.sym = (SDLKey)34;
-				else if (event.key.keysym.sym == 96)								// ` => ~
-					event.key.keysym.sym = (SDLKey)126;
-				else if (event.key.keysym.sym == 54)								// 6 => ^
-					event.key.keysym.sym = (SDLKey)94;
+					if (!deadKey && event.type == SDL_KEYDOWN && event.key.keysym.unicode == 0)
+						//			if (!deadKey && event.type == SDL_KEYDOWN)
+						if (event.key.keysym.sym == SDLK_QUOTE || event.key.keysym.sym == SDLK_QUOTEDBL || event.key.keysym.sym == SDLK_BACKQUOTE || event.key.keysym.sym == 126 || event.key.keysym.sym == SDLK_CARET)
+						{
+						deadKey = event.key.keysym.sym;
+						return;
+						}
 
-			if (!deadKey && event.type == SDL_KEYDOWN && event.key.keysym.unicode == 0)
-//			if (!deadKey && event.type == SDL_KEYDOWN)
-				if (event.key.keysym.sym == SDLK_QUOTE || event.key.keysym.sym == SDLK_QUOTEDBL || event.key.keysym.sym == SDLK_BACKQUOTE || event.key.keysym.sym == 126 || event.key.keysym.sym == SDLK_CARET)
+					if (deadKey && event.type == SDL_KEYDOWN)
 					{
-					deadKey = event.key.keysym.sym;
-					return;
-					}
-
-			if (deadKey && event.type == SDL_KEYDOWN)
-				{
-				if (event.key.keysym.sym < 254)
-					{
-					if (event.key.keysym.unicode > 127)
-						for (int i = 128; i < 256; i++)
-							if (cpMap[i] == event.key.keysym.unicode)
-								{
+						if (event.key.keysym.sym < 254)
+						{
+							if (event.key.keysym.unicode > 127)
+								for (int i = 128; i < 256; i++)
+									if (cpMap[i] == event.key.keysym.unicode)
+									{
 								BIOS_AddKeyToBuffer(i);
 								deadKey = 0;
 								return;
-								}
-					BIOS_AddKeyToBuffer(deadKey);
-					if (event.key.keysym.sym != 32)									// If not space, add character
-						{
-						int correct = 0;
-						if (event.key.keysym.sym >= 'a' && event.key.keysym.sym <= 'z')		// Shift reported as unshifted, CAPS not handled
+									}
+							BIOS_AddKeyToBuffer(deadKey);
+							if (event.key.keysym.sym != 32)									// If not space, add character
 							{
-							if (event.key.keysym.mod&KMOD_CAPS)
-								correct = -32;
-							if (event.key.keysym.mod&(KMOD_LSHIF|KMOD_RSHIFT))
-								correct = -(correct+32);
+								int correct = 0;
+								if (event.key.keysym.sym >= 'a' && event.key.keysym.sym <= 'z')		// Shift reported as unshifted, CAPS not handled
+								{
+									if (event.key.keysym.mod&KMOD_CAPS)
+										correct = -32;
+									if (event.key.keysym.mod&(KMOD_LSHIF | KMOD_RSHIFT))
+										correct = -(correct + 32);
+								}
+								BIOS_AddKeyToBuffer(event.key.keysym.sym);
 							}
-						BIOS_AddKeyToBuffer(event.key.keysym.sym);
+							deadKey = 0;
+							return;
 						}
-					deadKey = 0;
-					return;
 					}
-				}
-			if (deadKey && event.type == SDL_KEYUP && event.key.keysym.sym == deadKey)
-				return;
+					if (deadKey && event.type == SDL_KEYUP && event.key.keysym.sym == deadKey)
+						return;
+#ifdef WITHIRQ1
+			}
+#endif
 			if (event.key.keysym.sym >= SDLK_KP0 && event.key.keysym.sym <= SDLK_KP9 && event.key.keysym.mod&(KMOD_LSHIF|KMOD_RSHIFT) && !(event.key.keysym.mod&SDLK_NUMLOCK))
 				event.key.keysym.unicode = event.key.keysym.sym - SDLK_KP0 + 48;	// Why aren't these reported as Unicode?
+#ifdef WITHIRQ1
+			if (useIrq1)
+				KEYBOARD_AddKey(event.key.keysym.sym, event.type == SDL_KEYDOWN);
+			else
+#endif
 			BIOS_AddKey(event.key.keysym.scancode, event.key.keysym.unicode, event.key.keysym.sym, event.type == SDL_KEYDOWN);
+
 			break;
 			}
 		}
@@ -1194,8 +1210,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	try
 		{
 		MSG_Init();
-
-		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE))						// Init SDL
+#ifdef WITHIRQ1
+		//We need to put the SDL_DISABLE_LOCK_KEYS env string before calling SDL_Init 
+		//and we only do that when the kbxy3 config option is set
+		//So load config early to get the "KBXY3" config value and decide
+		vDos_LoadConfig(); 
+		useIrq1 = ConfGetBool("kbxy3");
+		if (useIrq1)
+			SDL_putenv("SDL_DISABLE_LOCK_KEYS=1");
+		
+#endif
+		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE ))						// Init SDL
 			E_Exit("Could't init SDL, %s", SDL_GetError());
 		if (TTF_Init())																// Init SDL-TTF
 			E_Exit("Could't init SDL-TTF, %s", SDL_GetError());
@@ -1205,6 +1230,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		SDL_EnableUNICODE(true);
 
 		vDOS_Init();
+
+		
 		}
 	catch (char * error)
 		{
