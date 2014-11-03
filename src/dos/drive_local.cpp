@@ -222,6 +222,9 @@ bool localDrive::FindNext(DOS_DTA & dta)
 		char find_name[DOS_NAMELENGTH_ASCII];
 		Bit16u find_date,find_time;
 		Bit32u find_size;
+
+		// work around an XY3 bug where it searches for a "." beyond the terminating \0; just initialize name to all \0
+		memset(find_name, 0, DOS_NAMELENGTH_ASCII);
 		strcpy(find_name, dosName ? srch_pattern : search_data.cFileName);			// If LFN of a SFN was found, we can't use that, use the search pattern (has to be the SFN)
 		upcase(find_name);
 		find_size = search_data.nFileSizeLow;
