@@ -11,6 +11,12 @@ rem BEEPXY3 = OFF
 rem Deactivate short file name support for long file names
 rem SFN83 = OFF
 
+rem Keyboard repeat delay in msec
+rem KBREPDEL = 500
+
+rem Keyboard repeat rate interval in msec, 0 disables repeat
+rem KBREPINTER = 10
+
 
 REM Memory
 REM ======

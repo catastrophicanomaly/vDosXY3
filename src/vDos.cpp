@@ -286,6 +286,8 @@ void vDos_LoadConfig(void)
 	//Option to disable the full IRQ1 keyboard handling
 	ConfAddBool("kbxy3", true);
 #endif
+	ConfAddInt("kbrepdel", 500); 
+	ConfAddInt("kbrepinter", 10);
 #ifdef BEEP
 	//Option to disable the rudimentary sound support
 	ConfAddBool("beepxy3", true);

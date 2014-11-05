@@ -1226,7 +1226,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			E_Exit("Could't init SDL-TTF, %s", SDL_GetError());
 
 		SDL_putenv("SDL_VIDEO_CENTERED=center");
-		SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, 50);
+		
+		//SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, 10);
+		
+		//Key repeat rate configurable with "kbrepdel" and "kbrepinter" options in config.txt
+		SDL_EnableKeyRepeat(ConfGetInt("kbrepdel"), ConfGetInt("kbrepinter"));
 		SDL_EnableUNICODE(true);
 
 		vDOS_Init();
