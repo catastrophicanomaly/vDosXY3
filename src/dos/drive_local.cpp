@@ -202,7 +202,7 @@ bool localDrive::FindNext(DOS_DTA & dta)
 		bool dosName = false;
 #ifdef SFN83
 		if (ConfGetBool("sfn83"))
-			if (strlen(search_data.cAlternateFileName) != 0)
+			if (strlen(search_data.cAlternateFileName) != 0 &&  !isDosName(search_data.cFileName))
 				strcpy(search_data.cFileName, search_data.cAlternateFileName);
 #endif
 		if (!isDosName(search_data.cFileName))										// If it's not a DOS 8.3 name

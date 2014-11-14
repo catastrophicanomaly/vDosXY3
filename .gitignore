@@ -3,3 +3,4 @@
 *.asm
 /visualc_net_2013/Debug
 visualc_net_2013
+*.tlog
