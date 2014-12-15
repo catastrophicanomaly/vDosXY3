@@ -51,6 +51,8 @@ typedef struct {
 	struct {
 		Bitu address;
 		Bit8u sline, eline;
+		Bit8u count;
+		bool blinkon;
 		Bit8u enabled;
 	} cursor;
 } VGA_Draw;

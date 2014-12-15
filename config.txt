@@ -17,6 +17,26 @@ rem KBREPDEL = 500
 rem Keyboard repeat rate interval in msec, 0 disables repeat
 rem KBREPINTER = 10
 
+rem If you add this line to config.txt and - this is the really crucial part - 
+rem you ALSO specify an external font like Consolas - then the C-cedilla will 
+rem appear where you expect it to be. 
+rem This will absolutely NOT work with the default internal vDos font, 
+rem only with an external font that maps the C-cedilla and euro in the way that Windows expects.
+rem Remember: euro = off will only turn off the euro if you use an external font, not the default built-in font. 
+euro = off
+
+rem put string of your choice in the title bar - of course only if you also use frame = on!
+title = vDos - XyWrite 3
+
+rem Uncomment to have a blinking cursor
+blinkc = ON
+
+rem This will put the specified icon at the upper left corner of the window.
+rem icon = someiconfile.ico
+
+
+
+
 
 REM Memory
 REM ======

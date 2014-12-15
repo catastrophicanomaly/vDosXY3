@@ -136,12 +136,21 @@ int GFX_SetCodePage(int cp)
 	for (int i = 0; i < 256; i++)
 		cTest[i] = i;
 	Bit16u wcTest[256];
+
+	// emendelson new eurofont routine
+	
 	if (MultiByteToWideChar(cp, 0, (char*)cTest, 256, NULL, 0) == 256)
 		{
 		int notMapped = 0;															// Number of characters not defined in font
 		MultiByteToWideChar(cp, 0, (char*)cTest, 256, (LPWSTR)wcTest, 256);
 		Bit16u unimap;	
-		for (int c = 128+(TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac) ? 1 : 0); c < 256; c++)	// Check all characters above 128 (128 = always Euro symbol if defined in font)
+		int cOffset;
+		if (ConfGetBool("euro"))
+			cOffset = (TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac) ? 1 : 0);
+		else
+			//Do not replace cedilla with euro if config.txt contains "euro=off
+			cOffset = 0;
+		for (int c = 128+ cOffset; c < 256; c++)	// Check all characters above 128 (128 = always Euro symbol if defined in font)
 			{
 			unimap = wcTest[c];
 			if (!fontBoxed || c < 176 || c > 223)
@@ -154,6 +163,9 @@ int GFX_SetCodePage(int cp)
 			}
 		return notMapped;
 		}
+	
+	// end emendelson new eurofont routine
+
 	return -1;																		// Code page not set
 	}
 
@@ -188,6 +200,7 @@ static int prev_sline = -1;
 static bool hasFocus = true;														// Only used if not framed
 static bool hasMinButton = false;													// ,,
 static bool cursor_enabled = false;
+static bool blinkstate = false;
 
 bool dumpScreen(void)
 	{
@@ -238,6 +251,7 @@ void GFX_EndTextLines(void)
 	{
 	if (aboutShown || selectingText)												// The easy way: don't update if About box or selectting text
 		return;
+	
 	Uint16 unimap[txtMaxCols+1];													// Max+1 charaters in a line
 	int xmin = ttf.cols;															// Keep track of changed area
 	int ymin = ttf.lins;
@@ -247,7 +261,6 @@ void GFX_EndTextLines(void)
 	Bit16u *newAC = newAttrChar;													// New/changed buffer
 
 	if (ttf.cursor >= 0 && ttf.cursor < ttf.cols*ttf.lins)							// Hide/restore (previous) cursor-character if we had one
-//		if (ttf.cursor != vga.draw.cursor.address>>1 || (vga.draw.cursor.enabled !=  cursor_enabled) || vga.draw.cursor.sline > vga.draw.cursor.eline || vga.draw.cursor.sline > 15)
 		if (ttf.cursor != vga.draw.cursor.address>>1 || vga.draw.cursor.sline > vga.draw.cursor.eline || vga.draw.cursor.sline > 15)
 			curAC[ttf.cursor] = newAC[ttf.cursor]^0xf0f0;							// Force redraw (differs)
 
@@ -361,19 +374,31 @@ void GFX_EndTextLines(void)
 		}
 	if (hasFocus && vga.draw.cursor.enabled && vga.draw.cursor.sline <= vga.draw.cursor.eline && vga.draw.cursor.sline < 16)	// Draw cursor?
 		{
+		
 		int newPos = vga.draw.cursor.address>>1;
 		if (newPos >= 0 && newPos < ttf.cols*ttf.lins)								// If on screen
 			{
+			
 			int y = newPos/ttf.cols;
 			int x = newPos%ttf.cols;
-			if (ttf.cursor != newPos || vga.draw.cursor.sline != prev_sline)		// If new position or shape changed, forse draw
+
+			vga.draw.cursor.count++;
+			vga.draw.cursor.blinkon = (vga.draw.cursor.count & 4) ? true : false;
+			
+			if (ttf.cursor != newPos || vga.draw.cursor.sline != prev_sline || ((blinkstate != vga.draw.cursor.blinkon) && blinkCursor))		// If new position or shape changed, forse draw
 				{
+				if (blinkCursor && blinkstate == vga.draw.cursor.blinkon)
+				{
+					vga.draw.cursor.count = 4;
+					vga.draw.cursor.blinkon = true;
+				}
 				prev_sline = vga.draw.cursor.sline;
 				xmin = min(x, xmin);
 				xmax = max(x, xmax);
 				ymin = min(y, ymin);
 				ymax = max(y, ymax);
 				}
+			blinkstate = vga.draw.cursor.blinkon;
 			ttf.cursor = newPos;
 			if (x >= xmin && x <= xmax && y >= ymin && y <= ymax)					// If overdrawn previuosly (or new shape)
 				{
@@ -404,19 +429,27 @@ void GFX_EndTextLines(void)
 				unimap[0] = cpMap[newAttrChar[ttf.cursor]&255];
 				unimap[1] = 0;
 				// first redraw character
+				
+	
 				SDL_Surface* textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_fgColor, ttf_bgColor);
+
 				ttf_textClip.w = ttf.width;
-				ttf_textRect.x = ttf.offX+x*ttf.width;
-				ttf_textRect.y = ttf.offY+y*ttf.height;
+				ttf_textRect.x = ttf.offX + x*ttf.width;
+				ttf_textRect.y = ttf.offY + y*ttf.height;
 				SDL_BlitSurface(textSurface, &ttf_textClip, sdl.surface, &ttf_textRect);
 				SDL_FreeSurface(textSurface);
+
 				// seccond reverse lower lines
-				textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_bgColor, ttf_fgColor);
-				ttf_textClip.y = (ttf.height*vga.draw.cursor.sline)>>4;
-				ttf_textClip.h = ttf.height - ttf_textClip.y;						// For now, cursor to bottom
-				ttf_textRect.y = ttf.offY+y*ttf.height + ttf_textClip.y;
-				SDL_BlitSurface(textSurface, &ttf_textClip, sdl.surface, &ttf_textRect);
-				SDL_FreeSurface(textSurface);
+				if (vga.draw.cursor.blinkon || !blinkCursor)
+				{
+					textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_bgColor, ttf_fgColor);
+					ttf_textClip.y = (ttf.height*vga.draw.cursor.sline) >> 4;
+					ttf_textClip.h = ttf.height - ttf_textClip.y;						// For now, cursor to bottom
+					ttf_textRect.y = ttf.offY + y*ttf.height + ttf_textClip.y;
+					SDL_BlitSurface(textSurface, &ttf_textClip, sdl.surface, &ttf_textRect);
+					SDL_FreeSurface(textSurface);
+				}
+	
 				}
 			}
 		}
@@ -700,21 +733,32 @@ void GUI_StartUp()
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
 	GetStartupInfo(&si);
-	SDL_WM_SetCaption("vDos", "vDos");
-	char *caption = (char*)tempBuff32K;
-	strcpy(caption, si.lpTitle);
-	if (caption = strrchr(caption, '\\'))
+
+		//new title and icon: henssel emendelson
+	const char *windowTitle = ConfGetString("TITLE");
+	if (*windowTitle) 
 		{
-		if (char *p = strrchr(caption, '.'))
-			*p = 0;
-		SDL_WM_SetCaption(caption+1, caption+1);
+			SDL_WM_SetCaption(windowTitle, windowTitle);
+		} else {
+			SDL_WM_SetCaption("vDos", "vDos");
 		}
+		
 	SDL_SysWMinfo wminfo;
 	SDL_VERSION(&wminfo.version);
 	SDL_GetWMInfo(&wminfo);
 	sdlHwnd = wminfo.window;
 
-	SetClassLong(sdlHwnd, GCL_HICON, (LONG)LoadIcon(GetModuleHandle(NULL), "vDos_ico"));	// Set vDos (SDL) icon
+	HICON IcoHwnd = (HICON)LoadImage(NULL, ConfGetString("ICON"), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_SHARED | LR_LOADTRANSPARENT);
+	if(IcoHwnd) 
+		{
+		SetClassLongPtr(sdlHwnd, GCL_HICON, (LONG)IcoHwnd); // set icon to the external icon
+		} 
+		else 
+		{
+		SetClassLong(sdlHwnd, GCL_HICON, (LONG)LoadIcon(GetModuleHandle(NULL), "vDos_ico"));	// Set vDos (SDL) icon
+		}
+	// end new title and icon henssel emendelson
+	
 	char * fName = ConfGetString("font");
 	if (*fName == '-')																// (Preceeding) - indicates ASCII 176-223 = lines
 		{
@@ -737,6 +781,7 @@ void GUI_StartUp()
 		}
 
 	usesMouse = ConfGetBool("mouse");
+	blinkCursor = ConfGetBool("blinkc");
 //	wpVersion = ConfGetInt("wp");													// If negative, exclude some WP stuff in the future
 	winFramed = ConfGetBool("frame");
 	sdl.scale = ConfGetInt("scale");

@@ -39,6 +39,7 @@ extern int winHide10th;
 extern bool winHidden;
 extern DWORD hideWinTill;
 extern bool usesMouse;
+extern bool blinkCursor;
 extern int wpVersion;
 extern bool	mouseWP6x;
 extern int wsVersion;

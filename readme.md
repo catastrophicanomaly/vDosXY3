@@ -14,6 +14,11 @@ This fork tracks the master source code of the vDos project and adds the followi
 
 * Implement support for short file name versions of long filenames. **NOTE:** you can disable this by adding SFN83 = OFF to your config.txt.
 
+* Modification by Edward Mendelson for C-Cedilla
+
+* Modification by Edward Mendelson to set title bar text and icon
+
+* Optional blinking cursor
 
 ---
 

@@ -23,12 +23,16 @@ static void VGA_VerticalTimer()
 	PIC_AddEvent(VGA_VerticalTimer, 20.0);											// Refresh screen at 50 frames per sec (so it should be 20.0, but must use 10.0!)
 	vga.draw.vertRetrace = !vga.draw.vertRetrace;									// So it's just half the times
 	inReset = false;
-
+	
 	if (vga.mode == M_TEXT)
 		{
 		if (GFX_StartUpdate())
 			{
+			
 			vga.draw.cursor.address = vga.config.cursor_start*2;
+			//vga.draw.cursor.count++;
+			//vga.draw.cursor.blinkon = (vga.draw.cursor.count & 4) ? true : false;
+			
 			newAttrChar = (Bit16u *)(MemBase+((CurMode->mode) == 7 ? 0xB0000 : 0xb8000));	// Pointer to chars+attribs
 //			newAttrChar = (Bit16u *)(MemBase+((vga.gfx.miscellaneous >> 2) == 3 ? 0xb8000 : 0xb8000));	// Pointer to chars+attribs
 			GFX_EndUpdate();

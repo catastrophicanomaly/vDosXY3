@@ -49,6 +49,7 @@ int winHide10th = 0;
 bool winHidden = true;
 DWORD hideWinTill;
 bool usesMouse;
+bool blinkCursor;
 int wpVersion;																		// 1 - 99 (mostly 51..62, negative value will exclude some WP additions)
 bool mouseWP6x;																		// WP6.x with Mouse Driver (Absolute/Pen)
 int wsVersion;																		// For now just 0 (no WordStar) or 1
@@ -272,6 +273,9 @@ void ParseConfigFile()
 				ConfAddError(parseRes, line);
 		}
 	fclose(cFile);
+
+	if (*(ConfGetString("font")) == '\0' && !ConfGetBool("Euro"))
+		ConfAddError("Option EURO=OFF does not work with the built-in font, please use an external font like consola", "");
 	}
 
 static void ConfShowErrors()
@@ -298,6 +302,11 @@ void vDos_LoadConfig(void)
 #endif
 	ConfAddInt("scale", 0);
 	ConfAddString("window", "");
+
+	// title and icon emendelson from rhenssel
+	ConfAddString("title", "vDos");
+	ConfAddString("icon", "vDos_ico");
+	
 	ConfAddBool("low", false);
 	ConfAddBool("ems", false);
 	ConfAddString("colors", "");
@@ -307,6 +316,8 @@ void vDos_LoadConfig(void)
 	ConfAddBool("frame", false);
 	ConfAddString("font", "");
 	ConfAddString("wp", "");
+	ConfAddBool("euro", true); // emendelson euro
+	ConfAddBool("blinkc", false);
 	ParseConfigFile();
 	}
 
