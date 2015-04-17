@@ -17,12 +17,6 @@
     <Filter Include="Source Files\hardware\vga">
       <UniqueIdentifier>{161150b5-1b21-4cb0-bdee-df462af4ac05}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\hardware\serialport">
-      <UniqueIdentifier>{f467f470-d135-4adf-88dd-f0fe2702ccb1}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\hardware\parport">
-      <UniqueIdentifier>{53fa81c5-eca5-4c7c-9162-bf84ec612ea4}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\gui">
       <UniqueIdentifier>{0d005566-1403-4d99-a289-828487c58d9e}</UniqueIdentifier>
     </Filter>
@@ -43,12 +37,6 @@
     </Filter>
     <Filter Include="Source Files\dos">
       <UniqueIdentifier>{e5c16caa-fd47-46ae-9967-ef267759fd76}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\dos\win32headers">
-      <UniqueIdentifier>{0cebaba6-52f0-4a8e-b07f-227285a7172b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\dos\drives">
-      <UniqueIdentifier>{f81f6004-8e64-481a-a61d-f3db83fee41e}</UniqueIdentifier>
     </Filter>
     <Filter Include="Header Files">
       <UniqueIdentifier>{0d192fcb-3872-404e-8232-885bfc8fea27}</UniqueIdentifier>
@@ -115,12 +103,6 @@
     </ClCompile>
     <ClCompile Include="..\src\hardware\vga_seq.cpp">
       <Filter>Source Files\hardware\vga</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\hardware\serialport\serialport.cpp">
-      <Filter>Source Files\hardware\serialport</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\hardware\parport\parport.cpp">
-      <Filter>Source Files\hardware\parport</Filter>
     </ClCompile>
     <ClCompile Include="..\src\gui\render.cpp">
       <Filter>Source Files\gui</Filter>
@@ -212,23 +194,26 @@
     <ClCompile Include="..\src\dos\dos_tables.cpp">
       <Filter>Source Files\dos</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\dos\drive_local.cpp">
-      <Filter>Source Files\dos\drives</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\dos\drive_virtual.cpp">
-      <Filter>Source Files\dos\drives</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\dos\drives.cpp">
-      <Filter>Source Files\dos\drives</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\hardware\parport\devicePRT.cpp">
-      <Filter>Source Files\hardware\parport</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\vdos.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\ints\ems.cpp">
       <Filter>Source Files\ints</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\dos\drives.cpp">
+      <Filter>Source Files\dos</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\gui\freetype.cpp">
+      <Filter>Source Files\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\hardware\parport.cpp">
+      <Filter>Source Files\hardware</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\hardware\serialport.cpp">
+      <Filter>Source Files\hardware</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\dos\devicePRT.cpp">
+      <Filter>Source Files\dos</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -285,9 +270,6 @@
     <ClInclude Include="..\src\dos\dev_con.h">
       <Filter>Source Files\dos</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\dos\drives.h">
-      <Filter>Source Files\dos\win32headers</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\bios.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -321,9 +303,6 @@
     <ClInclude Include="..\include\parport.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\pic.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\programs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -340,9 +319,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\support.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\timer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\vga.h">
@@ -364,6 +340,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\vDosTTF.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\ttf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

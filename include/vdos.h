@@ -8,9 +8,9 @@
 
 void E_Exit(const char * message,...);
 
-void MSG_Init();							// Set default (English) messages
-void MSG_Add(const char*,const char*);		// Add messages to the internal langaugefile
-const char* MSG_Get(char const *);			// Get messages from the internal langaugafile
+void MSG_Init();																	// Set default (English) messages
+void MSG_Add(const char*,const char*);												// Add messages to the internal langaugefile
+const char* MSG_Get(char const *);													// Get messages from the internal langaugafile
 
 extern char vDosVersion[];
 
@@ -19,11 +19,11 @@ bool ConfGetBool(const char *name);
 int ConfGetInt(const char *name);
 char * ConfGetString(const char *name);
 void ConfAddError(char* desc, char* errLine);
-void vDOS_Init(void);
+void vDos_Init(void);
 
 extern HWND	sdlHwnd;
 
-#define MAX_PATH_LEN 512					// Maximum filename size
+#define MAX_PATH_LEN 512															// Maximum filename size
 
 #define txtMaxCols	160
 #define txtMaxLins	60
@@ -39,6 +39,8 @@ extern bool	mouseWP6x;
 extern int wsVersion;
 extern int wsBackGround;
 extern int codepage;
+extern bool printTimeout;
+extern int eurAscii;
 
 extern Bit8u initialvMode;
 
@@ -46,17 +48,15 @@ extern bool wpExclude;
 extern int idleCount;
 
 #define CPU_CycleLow	5000
-#define CPU_CycleHigh	50000
+#define CPU_CycleHigh	30000
+extern Bit32s CPU_Cycles;
 extern Bit32s CPU_CycleMax;
-#define idleTrigger 5						// When to sleep
+#define PIT_TICK_RATE 1193182
 
-extern Bit8u tempBuff1K [];					// Temporary buffers, caution don't use them in routines calling routines that use them!
-extern Bit8u tempBuff2K [];
-extern Bit8u tempBuff4K [];
-extern Bit8u tempBuff32K [];
+#define idleTrigger 5																// When to sleep
 
 extern Bitu lastOpcode;
 
-extern bool EMS_present;
+extern bool ISR;																	// Interrupt Service Routine
 
 #endif

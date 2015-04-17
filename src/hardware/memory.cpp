@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <stdio.h>
 #include "vDos.h"
 #include "mem.h"
 #include "inout.h"
@@ -5,8 +7,14 @@
 #include "cpu.h"
 #include "bios.h"
 
-static Bit8u a20_controlport;
-static PageHandler * pageHandlers[MEM_PAGES];
+static PageHandler * pageHandlers[64];												// Pagehandlers for first MB
+
+unsigned int TotMemBytes;
+unsigned int TotMemMB = 1;
+unsigned int TotEXTMB = 0;
+unsigned int TotXMSMB = 0;
+unsigned int TotEMSMB = 0;
+unsigned int EndConvMem = 0x9fff;
 
 HostPt MemBase;
 
@@ -52,7 +60,7 @@ class ROMPageHandler : public RAMPageHandler
 public:
 	ROMPageHandler()
 		{
-		flags = PFLAG_READABLE|PFLAG_HASROM;
+		flags = PFLAG_READABLE;
 		}
 	void writeb(PhysPt addr, Bit8u val)
 		{
@@ -65,41 +73,85 @@ public:
 		}
 	};
 
+class ILLPageHandler : public RAMPageHandler
+	{
+public:
+	ILLPageHandler()
+		{
+		flags = 0;
+		}
+	Bit8u readb(PhysPt addr)
+		{
+		return 0xff;
+		}
+	Bit16u readw(PhysPt addr)
+		{
+		return 0xffff;
+		}
+	Bit32u readd(PhysPt addr)
+		{
+		return 0xffffffff;
+		}
+	void writeb(PhysPt addr, Bit8u val)
+		{
+		}
+	void writew(PhysPt addr, Bit16u val)
+		{
+		}
+	void writed(PhysPt addr, Bit32u val)
+		{
+		}
+	};
+
+
 static RAMPageHandler ram_page_handler;
 static ROMPageHandler rom_page_handler;
+static ILLPageHandler ill_page_handler;
 
-#define TLB_SIZE	65536															// Full TLB cache (Note: for LinToPhys() to function w/o masks and a second table,it has to be 20 bits)
+#define TLB_SIZE 8192															// 8192 ebtries in TLB cache
 static Bit32u TLB_phys[TLB_SIZE];
+static Bit32u TLB_cache[TLB_SIZE];
 
 void clearTLB(void)
 	{
-	memset(TLB_phys, 0xff, TLB_SIZE*4);
+	memset(TLB_cache, 0xff, TLB_SIZE*4);
 	}
 
-PhysPt LinToPhys(LinPt addr)
+PhysPt LinToPhys2(LinPt addr)
 	{
 	int TLB_idx = addr>>12;
-	if (TLB_phys[TLB_idx] == -1)
+	Bit32u pdAddr =(TLB_idx>>8)&0xffc;
+	Bit32u pdEntry = *(Bit32u *)(MemBase+PAGING_GetDirBase()+pdAddr);
+	if (pdEntry&1)
 		{
-		Bit32u pdAddr =(TLB_idx>>8)&0xffc;
-		Bit32u pdEntry = *(Bit32u *)(MemBase+PAGING_GetDirBase()+pdAddr);
-		if (!(pdEntry&1))
-			E_Exit("Page fault: directory entry not present: %x", addr);
 		Bit32u ptAddr = (pdEntry&~0xfff)+((TLB_idx<<2)&0xffc);
 		Bit32u ptEntry = *(Bit32u *)(MemBase+ptAddr);
-		if (!(ptEntry&1))
-			E_Exit("Page fault: table entry not present: %x", addr);
-		TLB_phys[TLB_idx] = ptEntry&~0xfff;
+		if (ptEntry&1)
+			{
+			TLB_cache[TLB_idx&(TLB_SIZE-1)] = TLB_idx;
+			TLB_phys[TLB_idx&(TLB_SIZE-1)] = ptEntry&~0xfff;
+			return TLB_phys[TLB_idx&(TLB_SIZE-1)]+(addr&0xfff);
+			}
+		E_Exit("Page fault: table entry not present: %x", addr);
 		}
-	return TLB_phys[TLB_idx]+(addr&0xfff);
+	E_Exit("Page fault: directory entry not present: %x", addr);
 	}
 
-PageHandler * MEM_GetPageHandler(PhysPt addr)
+__forceinline PhysPt LinToPhys(LinPt addr)
 	{
-	if (addr < TOT_MEM_BYTES)
+	int TLB_idx = addr>>12;
+	if (TLB_cache[TLB_idx&(TLB_SIZE-1)] == TLB_idx)
+		return TLB_phys[TLB_idx&(TLB_SIZE-1)]+(addr&0xfff);
+	return LinToPhys2(addr);
+	}
+
+__forceinline PageHandler * MEM_GetPageHandler(PhysPt addr)
+	{
+	if (addr < 0x100000)															// If in first MB
 		return pageHandlers[addr/MEM_PAGESIZE];
-	E_Exit("Access to invalid memory location %x", addr);
-	return 0;
+	if (addr < TotMemBytes)															// If in extended (or XMS)
+		return &ram_page_handler;
+	return &ill_page_handler;
 	}
 
 void MEM_SetPageHandler(Bitu phys_page, Bitu pages, PageHandler * handler)
@@ -114,114 +166,99 @@ void MEM_ResetPageHandler(Bitu phys_page, Bitu pages)
 		pageHandlers[phys_page++] = &ram_page_handler;
 	}
 
+void unhide_vDos()
+	{
+	if (winHidden && !winHide10th)													// Unhide window on access
+		{
+		hideWinTill = GetTickCount();
+		winHide10th = 1;															// It would kept to be delayed
+		}
+	else
+		idleCount++;
+	}
 
 Bit8u Mem_Lodsb(LinPt addr)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0xa0000 || addr > 0xfffff)											// If in lower or extended mem, read direct (always readable)
+	if (addr < 0xa0000)																// If in lower memory, read direct (always readable)
 		{
-		if ((addr <= BIOS_KEYBOARD_BUFFER_TAIL && addr >= BIOS_KEYBOARD_FLAGS1))// || addr == BIOS_KEYBOARD_FLAGS3)		// Access to keyboard info
-			{
-			if (winHidden && !winHide10th)											// Unhide window on access
-				{
-				hideWinTill = GetTickCount();
-				winHide10th = 1;													// It would kept to be delayed
-				}
-			else
-				idleCount++;
-			}
-		return *(Bit8u *)(MemBase+addr);
+		if ((addr <= BIOS_KEYBOARD_BUFFER_TAIL && addr >= BIOS_KEYBOARD_FLAGS1))	// Access to keyboard info
+			unhide_vDos();
+		return *(MemBase+addr);
 		}
-	PageHandler * ph = MEM_GetPageHandler(addr);
-	if (ph->flags&PFLAG_READABLE)
-		return *(Bit8u *)(ph->GetHostPt(addr));
-	return ph->readb(addr);
+	if ((addr >= 0xf0000 && addr < TotMemBytes))									// If in last 64KB or extended mem, read direct (always readable)
+		return *(MemBase+addr);
+	return MEM_GetPageHandler(addr)->readb(addr);
 	}
 
 Bit16u Mem_Lodsw(LinPt addr)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0x9ffff || addr > 0xfffff)											// If in lower or extended mem, read direct (always readable)
+	if (addr < 0x9ffff)																// If in lower mem, read direct (always readable)
 		{
 		if (addr <= BIOS_KEYBOARD_BUFFER_TAIL && addr >= BIOS_KEYBOARD_FLAGS1)		// Access to keyboard info
-			{
-			if (winHidden && !winHide10th)											// Unhide window on access
-				{
-				hideWinTill = GetTickCount();
-				winHide10th = 1;													// It would kept to be delayed
-				}
-			else
-				idleCount++;
-			}
+			unhide_vDos();
 		return *(Bit16u *)(MemBase+addr);
 		}
+	if ((addr >= 0xf0000 && addr < TotMemBytes-1))									// If in last 64 KB ir extended mem, read direct (always readable)
+		return *(Bit16u *)(MemBase+addr);
 	if ((addr&(MEM_PAGESIZE-1)) != (MEM_PAGESIZE-1))
+		return MEM_GetPageHandler(addr)->readw(addr);
+	Bit16u ret = 0;
+	for (Bit32u i = addr+1; i >= addr; i--)
 		{
-		PageHandler * ph = MEM_GetPageHandler(addr);
-		if (ph->flags&PFLAG_READABLE)
-			return *(Bit16u *)(ph->GetHostPt(addr));
-		else
-			return ph->readw(addr);
+		ret <<= 8;
+		ret |= MEM_GetPageHandler(i)->readb(i);
 		}
-	return Mem_Lodsb(addr) | (Mem_Lodsb(addr+1) << 8);
+	return ret;
 	}
 
 Bit32u Mem_Lodsd(LinPt addr)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0x9fffd || addr > 0xfffff)											// If in lower or exyended mem, read direct (always readable)
+	if (addr < 0x9fffd || (addr >= 0xf0000 && addr < TotMemBytes-3))				// In lower, last 64 KB, or extended mem, read direct (always readable)
 		return *(Bit32u *)(MemBase+addr);
 	if ((addr&(MEM_PAGESIZE-1)) < (MEM_PAGESIZE-3))
+		return MEM_GetPageHandler(addr)->readd(addr);
+	Bit32u ret = 0;
+	for (Bit32u i = addr+3; i >= addr; i--)
 		{
-		PageHandler * ph = MEM_GetPageHandler(addr);
-		if (ph->flags&PFLAG_READABLE)
-			return *(Bit32u *)(ph->GetHostPt(addr));
-		else
-			return ph->readd(addr);
+		ret <<= 8;
+		ret |= MEM_GetPageHandler(i)->readb(i);
 		}
-	return Mem_Lodsw(addr) | (Mem_Lodsw(addr+2) << 16);
+	return ret;
 	}
 
 void Mem_Stosb(LinPt addr, Bit8u val)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0xa0000 || addr > 0xfffff)											// If in lower or extended mem, write direct (always writeable)
+	if (addr < 0xa0000 || (addr > 0xfffff && addr < TotMemBytes))					// If in lower or extended mem, write direct (always writeable)
 		{
 		*(MemBase+addr) = val;
 		return;
 		}
-	PageHandler * ph = MEM_GetPageHandler(addr);
-	if (ph->flags&PFLAG_WRITEABLE)
-		*(Bit8u *)(ph->GetHostPt(addr)) = val;
-	else
-		ph->writeb(addr, val);
+	MEM_GetPageHandler(addr)->writeb(addr, val);
 	}
 
 void Mem_Stosw(LinPt addr, Bit16u val)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0x9ffff || addr > 0xfffff)											// If in lower or extended mem, write direct (always writeable)
+	if (addr < 0x9ffff || (addr > 0xfffff && addr < TotMemBytes-1))					// If in lower or extended mem, write direct (always writeable)
 		{
 		*(Bit16u *)(MemBase+addr) = val;
 		return;
 		}
-	if ((addr&(MEM_PAGESIZE-1)) < (MEM_PAGESIZE-1))
-		{
-		PageHandler * ph = MEM_GetPageHandler(addr);
-		if (ph->flags&PFLAG_WRITEABLE)
-			*(Bit16u *)(ph->GetHostPt(addr)) = val;
-		else
-			ph->writew(addr, val);
-		}
+	if ((addr&(MEM_PAGESIZE-1)) != (MEM_PAGESIZE-1))
+		MEM_GetPageHandler(addr)->writew(addr, val);
 	else
 		{
-		Mem_Stosb(addr, val&0xff);
-		Mem_Stosb(addr+1, val>>8);
+		MEM_GetPageHandler(addr)->writeb(addr, val&0xff);
+		MEM_GetPageHandler(addr+1)->writeb(addr+1, val>>8);
 		}
 	}
 
@@ -229,24 +266,30 @@ void Mem_Stosd(LinPt addr, Bit32u val)
 	{
 	if (PAGING_Enabled())
 		addr = LinToPhys(addr);
-	if (addr < 0x9fffd || addr > 0xfffff)											// If in lower mem, write direct (always writeable)
+	if (addr < 0x9fffd || (addr > 0xfffff && addr < TotMemBytes-3))					// If in lower or extended mem, write direct (always writeable)
 		{
 		*(Bit32u *)(MemBase+addr) = val;
 		return;
 		}
 	if ((addr&(MEM_PAGESIZE-1)) < (MEM_PAGESIZE-3))
-		{
-		PageHandler * ph = MEM_GetPageHandler(addr);
-		if (ph->flags&PFLAG_WRITEABLE)
-			*(Bit32u *)(ph->GetHostPt(addr)) = val;
-		else
-			ph->writed(addr, val);
-		}
+		MEM_GetPageHandler(addr)->writed(addr, val);
 	else
+		for (int i = 0; i < 4; i++)
+			{
+			MEM_GetPageHandler(addr)->writeb(addr, val&0xff);
+			val >>= 8;
+			addr++;
+			}
+	}
+
+void Mem_Movsb(LinPt dest, LinPt src)
+	{
+	if (PAGING_Enabled())
 		{
-		Mem_Stosw(addr, val&0xffff);
-		Mem_Stosw(addr+2, val>>16);
+		src = LinToPhys(src);
+		dest = LinToPhys(dest);
 		}
+	MEM_GetPageHandler(dest)->writeb(dest, MEM_GetPageHandler(src)->readb(src));
 	}
 
 void Mem_rMovsb(LinPt dest, LinPt src, Bitu bCount)
@@ -280,122 +323,6 @@ void Mem_rMovsb(LinPt dest, LinPt src, Bitu bCount)
 		else																		// Not writeable, or use (VGA)handler
 			while (bTodo--)
 				phDest->writeb(physDest++, phSrc->readb(physSrc++));
-		}
-	}
-
-void Mem_rMovsw(LinPt dest, LinPt src, Bitu wCount)
-	{
-	Bit16u maxMove = PAGING_Enabled() ? 4096 : MEM_PAGESIZE;						// If paging, use 4096 bytes page size (strictly not needed?)
-	Bitu bCount = wCount<<1;														// Have to use a byte count (words can be split over pages)
-	while (bCount)																	// Move in chunks of MEM_PAGESIZE for mapping to take effect
-		{
-		PhysPt physSrc = PAGING_Enabled() ? LinToPhys(src) : src;
-		PhysPt physDest = PAGING_Enabled() ? LinToPhys(dest) : dest;
-		Bit16u srcOff = ((Bit16u)physSrc)&(maxMove-1);
-		Bit16u destOff = ((Bit16u)physDest)&(maxMove-1);
-		Bit16u bTodo = maxMove - max(srcOff, destOff);
-		if (bTodo > bCount)
-			bTodo = bCount;
-		bCount -= bTodo;
-		Bit16u wTodo = bTodo>>1;
-		src += bTodo;
-		dest += bTodo;
-		PageHandler * phSrc = MEM_GetPageHandler(physSrc);
-		PageHandler * phDest = MEM_GetPageHandler(physDest);
-
-		if (phDest->flags&PFLAG_WRITEABLE && phSrc->flags&PFLAG_READABLE)
-			{
-			Bit8u *hSrc = phSrc->GetHostPt(physSrc);
-			Bit8u *hDest = phDest->GetHostPt(physDest);
-			if ((hSrc <= hDest && hSrc+bTodo > hDest) || (hDest <= hSrc && hDest+bTodo > hSrc))
-				{
-				while (wTodo--)														// If source and destination overlap, do it "by hand"
-					{
-				 	*(Bit16u *)hDest = *(Bit16u *)hSrc;								// memcpy() messes things up in another way than rep movsw does!
-					hSrc += 2;
-					hDest += 2;
-					}
-				if (bTodo&1)
-					*hDest = *hSrc;													// One byte left in this page
-				}
-			else
-				memcpy(hDest, hSrc, bTodo);											// memcpy() is optimized for 32 bits
-			}
-		else																		// Not writeable, or use (VGA)handler
-			{
-			while (wTodo--)
-				{
-				phDest->writew(physDest, phSrc->readw(physSrc));
-				physDest += 2;
-				physSrc += 2;
-				}
-			if (bTodo&1)
-				phDest->writeb(physDest, phSrc->readb(physSrc));
-			}
-		}
-	}
-
-void Mem_rMovsd(LinPt dest, LinPt src, Bitu dCount)
-	{
-	Bit16u maxMove = PAGING_Enabled() ? 4096 : MEM_PAGESIZE;						// If paging, use 4096 bytes page size (strictly not needed?)
-	Bitu bCount = dCount<<2;														// Have to use a byte count (dwords can be split over pages)
-	while (bCount)																	// Move in chunks of MEM_PAGESIZE for mapping to take effect
-		{
-		PhysPt physSrc = PAGING_Enabled() ? LinToPhys(src) : src;
-		PhysPt physDest = PAGING_Enabled() ? LinToPhys(dest) : dest;
-		Bit16u srcOff = ((Bit16u)physSrc)&(maxMove-1);
-		Bit16u destOff = ((Bit16u)physDest)&(maxMove-1);
-		Bit16u bTodo = maxMove - max(srcOff, destOff);
-		if (bTodo > bCount)
-			bTodo = bCount;
-		bCount -= bTodo;
-		Bit32u dTodo = bTodo>>2;
-		src += bTodo;
-		dest += bTodo;
-		PageHandler * phSrc = MEM_GetPageHandler(physSrc);
-		PageHandler * phDest = MEM_GetPageHandler(physDest);
-
-		if (phDest->flags&PFLAG_WRITEABLE && phSrc->flags&PFLAG_READABLE)
-			{
-			Bit8u *hSrc = phSrc->GetHostPt(physSrc);
-			Bit8u *hDest = phDest->GetHostPt(physDest);
-			if ((hSrc <= hDest && hSrc+bTodo > hDest) || (hDest <= hSrc && hDest+bTodo > hSrc))
-				{
-				while (dTodo--)														// If source and destination overlap, do it "by hand"
-					{
-				 	*(Bit32u*)hDest = *(Bit32u*)hSrc;								// memcpy() messes things up in another way than rep movsw does!
-					hSrc += 4;
-					hDest += 4;
-					}
-				if (bTodo&2)
-					{
-					*(Bit16u*)hDest = *(Bit16u*)hSrc;								// One word left in this page
-					hSrc += 2;
-					hDest += 2;
-					}
-				if (bTodo&1)
-					*hDest = *hSrc;													// One byte left in this page
-				}
-			else
-				memcpy(hDest, hSrc, bTodo);											// memcpy() is optimized for 32 bits
-			}
-		else																		// Not writeable, or use (VGA)handler
-			{
-			while (dTodo--)
-				{
-				phDest->writed(physDest, phSrc->readd(physSrc));
-				physDest += 4;
-				physSrc += 4;
-				}
-			if (bTodo&2)
-				{
-				phDest->writew(physDest, phSrc->readw(physSrc));
-				physDest += 2;
-				physSrc += 2;
-				}
-			if (bTodo&1)
-				phDest->writeb(physDest, phSrc->readb(physSrc));
-			}
 		}
 	}
 
@@ -481,7 +408,7 @@ void Mem_rStos4b(LinPt addr, Bit32u val32, Bitu bCount)								// Used by rStosw
 		if (ph->flags&PFLAG_WRITEABLE)
 			{
 			HostPt hPtr = ph->GetHostPt(physAddr);
-			while ((Bit32u)(hPtr) & 3)												// Align start address to 32 bit
+			while ((Bit32u)(hPtr)&3)												// Align start address to 32 bit
 				{
 				*(hPtr++) = val32&0xff;
 				val32 = _rotr(val32, 8);
@@ -553,15 +480,12 @@ void Mem_rStosb(LinPt addr, Bit8u val, Bitu count)
 	}
 
 static void write_p92(Bitu port, Bitu val, Bitu iolen)
-	{	
-	if (val&1)																		// Bit 0 = system reset (switch back to real mode)
-		E_Exit("CPU reset via port 0x92 not supported.");
-	a20_controlport = val & ~2;
+	{
 	}
 
 static Bitu read_p92(Bitu port, Bitu iolen)
 	{
-	return a20_controlport;
+	return 0;
 	}
 
 static IO_ReadHandleObject ReadHandler;
@@ -569,12 +493,51 @@ static IO_WriteHandleObject WriteHandler;
 
 void MEM_Init()
 	{
-	MemBase = (Bit8u *)malloc(TOT_MEM_BYTES);										// Setup the physical memory
+	char *xmem = ConfGetString("xmem");
+	if (*xmem)
+		{
+		int testVal;
+		char testStr1[512];
+		char testStr2[512];
+		bool error = true;
+		if (*xmem == '+')															// 704K option
+			{
+			EndConvMem += 0x1000;
+			xmem++;
+			}
+		if (sscanf(xmem, "%d%s%s", &testVal, testStr1, testStr2) == 2)
+			{
+			if (testVal > 0 && testVal < 64)
+				{
+				error = false;
+				if (!stricmp("EXT", testStr1))
+					TotEXTMB = testVal;
+				else if (!stricmp("XMS", testStr1))
+					TotXMSMB = testVal;
+				else if (!stricmp("EMS", testStr1))
+					TotEMSMB = testVal;
+				else
+					error = true;
+				if (!error)
+					TotMemMB = TotEXTMB+TotXMSMB+1;
+				}
+			}
+		if (error)
+			ConfAddError("Invalid XMEM= parameters\n", xmem);
+		}
+	else
+		{
+		TotXMSMB = 4;																// Default 4MB XMS
+		TotMemMB = TotXMSMB+1;
+		}
+
+	MemBase = (Bit8u *)_aligned_malloc((TotMemMB+TotEMSMB)*1024*1024, MEM_PAGESIZE);// Setup the physical memory
 	if (!MemBase)
-		E_Exit("Can't allocate main memory of %d MB", TOT_MEM_MB);
-	memset((void*)MemBase, 0, TOT_MEM_BYTES);										// Clear the memory
+		E_Exit("Can't allocate main memory of %d MB", TotMemMB+TotEMSMB);
+	TotMemBytes = TotMemMB*1024*1024;
+	memset((void*)MemBase, 0, TotMemBytes);											// Clear the memory
 		
-	for (Bitu i = 0; i < MEM_PAGES; i++)
+	for (Bitu i = 0; i < 64; i++)													// Setup handlers for first MB
 		pageHandlers[i] = &ram_page_handler;
 	for (Bitu i = 0xc0000/MEM_PAGESIZE; i < 0xc4000/MEM_PAGESIZE; i++)				// Setup rom at 0xc0000-0xc3fff
 		pageHandlers[i] = &rom_page_handler;

@@ -125,7 +125,7 @@ static Bit16u EMS_Defrag()															// Defrag EMS memory and return free sp
 		if (ems_handles[i].pages != NULL_PAGE)
 			sortedHandles[numHandles++] = i;
 	if (!numHandles)																// If no handles in use, return all EMS memory as free
-		return (TOT_MEM_KB-1024)/16;
+		return TotEMSMB*1024*1024/MEM_PAGESIZE;
 
 	for (int i = 0; i < numHandles-1; i++)											// Sort the handles in order of memory address
 		for (int j = 0; j < numHandles-1-i; j++)
@@ -152,12 +152,12 @@ static Bit16u EMS_Defrag()															// Defrag EMS memory and return free sp
 			}
 		lowAddr += handlePtr->pages*EMS_PAGE_SIZE;
 		}
-	return (Bit16u)((TOT_MEM_BYTES-lowAddr)/EMS_PAGE_SIZE);
+	return (Bit16u)((((TotEMSMB+1)*1024*1024)-lowAddr)/EMS_PAGE_SIZE);
 	}
 
 static Bit16u EMS_GetFreePages(void)
 	{
-	Bitu free = (TOT_MEM_KB-1024)/16;
+	Bitu free = TotEMSMB*1024*1024/MEM_PAGESIZE;
 	for (Bit16u i = 1; i < EMS_HANDLES; i++)
 		if (ems_handles[i].pages != NULL_PAGE)
 			free -= ems_handles[i].pages;
@@ -166,7 +166,7 @@ static Bit16u EMS_GetFreePages(void)
 
 Bit16u EMS_FreeKBs()
 	{
-	return EMS_present ? EMS_GetFreePages()*16 : 0;
+	return TotEMSMB ? EMS_GetFreePages()*16 : 0;
 	}
 
 static Bit8u EMS_AllocateMemory(Bit16u pages, Bit16u & dhandle)
@@ -181,7 +181,7 @@ static Bit8u EMS_AllocateMemory(Bit16u pages, Bit16u & dhandle)
 	if (freePages < pages)															// Enough free pages?
 		return EMS_OUT_OF_LOG;
 	ems_handles[handle].pages = pages;
-	ems_handles[handle].addr = TOT_MEM_BYTES-freePages*EMS_PAGE_SIZE;
+	ems_handles[handle].addr = (TotEMSMB+1)*1024*1024-freePages*EMS_PAGE_SIZE;
 	ems_handles[handle].saved_page_map = false;
 	dhandle = handle;
 	return EMS_NO_ERROR;
@@ -263,7 +263,7 @@ static Bitu INT67_Handler(void)
 		break;
 	case 0x42:																		// Get number of pages 
 		reg_bx = EMS_GetFreePages();
-		reg_dx = (TOT_MEM_KB-1024)/16;
+		reg_dx = TotEMSMB*1024*1024/MEM_PAGESIZE;
 		reg_ah = EMS_NO_ERROR;
 		break;
 	case 0x43:																		// Request handle and allocate pages
@@ -314,12 +314,8 @@ static Bitu INT67_Handler(void)
 
 void EMS_Init()
 	{
-	if (ConfGetBool("ems"))															// For now steal all from XMS (including first 64KB) 
+	if (TotEMSMB)
 		{
-		EMS_present = true;
-		Bit16u freeXMS, handleXMS;
-		XMS_QueryFreeMemory(freeXMS);
-		XMS_AllocateMemory(freeXMS, handleXMS);					
 		Bit16u ems_baseseg = DOS_GetPrivatMemory(2);								// Request 32 bytes block from DOS
 		Mem_CopyTo(SegOff2Ptr(ems_baseseg, 0xa), "EMMXXXX0", 8);
 		Bitu cbID = CALLBACK_Allocate();

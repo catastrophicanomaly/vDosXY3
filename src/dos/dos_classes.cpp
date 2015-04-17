@@ -60,7 +60,7 @@ void DOS_InfoBlock::SetLocation(Bit16u segment)
 	
 	sSave(sDIB, bootDrive, (Bit8u)0);
 	sSave(sDIB, useDwordMov, (Bit8u)1);
-	sSave(sDIB, extendedSize, TOT_MEM_BYTES/1024-1024);
+	sSave(sDIB, extendedSize, (TotEXTMB+TotXMSMB)*1024);
 	sSave(sDIB, magicWord, (Bit16u)0x0001);		// dos5+
 
 	sSave(sDIB, sharingCount, (Bit16u)0);
@@ -134,7 +134,7 @@ void DOS_InfoBlock::SetDiskBufferHeadPt(Bit32u _dbheadpt)
 Bit16u DOS_InfoBlock::GetStartOfUMBChain(void)
 	{
 	Bit16u umb_start = (Bit16u)sGet(sDIB, startOfUMBChain);
-	if (umb_start != 0xffff && umb_start != 0x9fff)
+	if (umb_start != 0xffff && umb_start != EndConvMem)
 		E_Exit("Corrupt UMB chain: %x", umb_start);
 	return umb_start;
 	}
@@ -198,7 +198,7 @@ void DOS_PSP::MakeNew(Bit16u mem_size)
 	// FCBs are filled with 0
 	// ....
 	/* Init file pointer and max_files */
-	sSave(sPSP,file_table, SegOff2dWord(seg, offsetof(sPSP,files)));
+	sSave(sPSP, file_table, SegOff2dWord(seg, offsetof(sPSP,files)));
 	sSave(sPSP, max_files, 20);
 	for (Bit16u ct = 0; ct < 20; ct++)
 		SetFileHandle(ct, 0xff);
@@ -307,15 +307,17 @@ void DOS_PSP::SetFCB2(RealPt src)
 
 void DOS_PSP::SetNumFiles(Bit16u fileNum)
 	{
-	if (sGet(sPSP, max_files) < 20 || (sGet(sPSP, max_files) == 20 && sGet(sPSP, file_table)>>12 != pt) || (sGet(sPSP, max_files) > 20 && sGet(sPSP, file_table)>>12 == pt))
+	if (sGet(sPSP, max_files) < 20
+		|| (sGet(sPSP, max_files) == 20 && sGet(sPSP, file_table)>>12 != pt)
+		|| (sGet(sPSP, max_files) > 20 && sGet(sPSP, file_table)>>12 == pt))
 		E_Exit("PSP file table (JFT) is messed up");
 	if (fileNum > 20)																// Setup a table to accomondate more than 20 file handles?
 		{
-		if (sGet(sPSP, max_files) > 20)												// Already peviously done, do nothing
+		if (sGet(sPSP, max_files) > 20)												// Already done before
 			return;
 		Bit16u new_table = DOS_GetPrivatMemory(16);									// Allocate 16 para's, maximize to 255 file handles to prevent DOS memory leaking with subsequent calls
 		Mem_rStosb(new_table<<4, 0xff, 256);										// Init all to unused
-		Mem_rMovsb(new_table<<4, dWord2Ptr(sGet(sPSP, file_table)), 20);			// Copy 20 entries of PSP
+		Mem_rMovsb(new_table<<4, dWord2Ptr(sGet(sPSP, file_table)), 20);			// Copy 20 entries of PSP over
 		sSave(sPSP, file_table, SegOff2dWord(new_table, 0));						// Store new file table address
 		sSave(sPSP, max_files, fileNum);											// And max open files
 		}

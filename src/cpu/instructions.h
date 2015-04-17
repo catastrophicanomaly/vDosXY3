@@ -162,14 +162,10 @@
 	lf_resd=lf_var1d-lf_var2d;					\
 	lflags.type=t_CMPd;
 
-
 #define TESTD(op1,op2,load,save)							\
 	lf_var1d=load(op1);lf_var2d=op2;					\
 	lf_resd=lf_var1d & lf_var2d;				\
 	lflags.type=t_TESTd;
-
-
-
 
 #define INCB(op1,load,save)									\
 	LoadCF;lf_var1b=load(op1);								\
@@ -206,8 +202,6 @@
 	lf_resd=lf_var1d-1;										\
 	save(op1,lf_resd);										\
 	lflags.type=t_DECd;
-
-
 
 #define ROLB(op1,op2,load,save)						\
 	if (!(op2&0x7)) {								\
@@ -303,7 +297,6 @@
 	save(op1,lf_resd);							\
 	SETFLAGBIT(CF,lf_resd & 0x80000000);		\
 	SETFLAGBIT(OF,(lf_resd ^ (lf_resd<<1)) & 0x80000000);
-
 
 #define RCLB(op1,op2,load,save)							\
 	if (!(op2%9)) break;								\
@@ -832,8 +825,6 @@
 	}														\
 }
 
-
-
 #define GRP2W(blah)											\
 {															\
 	GetRM;Bitu which=(rm>>3)&7;								\
@@ -865,7 +856,6 @@
 		}													\
 	}														\
 }
-
 
 #define GRP2D(blah)											\
 {															\
@@ -937,9 +927,3 @@
 	lf_resd=(lf_var1d >> lf_var2b) | (op2 << (32-lf_var2b));	\
 	save(op1,lf_resd);											\
 	lflags.type=t_DSHRd;
-
-#define BSWAPW(op1)														\
-	op1 = 0;
-
-#define BSWAPD(op1)														\
-	op1 = (op1>>24)|((op1>>8)&0xFF00)|((op1<<8)&0xFF0000)|((op1<<24)&0xFF000000);

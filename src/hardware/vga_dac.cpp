@@ -52,7 +52,6 @@ static void write_p3c6(Bitu port, Bitu val, Bitu iolen)
 	{
 	if (vga.dac.hidac_counter > 3)
 		{
-		vga.dac.reg02 = val;
 		vga.dac.hidac_counter = 0;
 		VGA_StartResize();
 		return;
@@ -170,7 +169,6 @@ void VGA_SetupDAC(void)
 	vga.dac.read_index = 0;
 	vga.dac.write_index = 0;
 	vga.dac.hidac_counter = 0;
-	vga.dac.reg02 = 0;
 
 	// Setup the DAC IO port Handlers
 	IO_RegisterWriteHandler(0x3c6, write_p3c6);

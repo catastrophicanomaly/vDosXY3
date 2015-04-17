@@ -8,7 +8,6 @@
 #include "mem.h"
 #include "regs.h"
 #include "dos_inc.h"
-#include "drives.h"
 #include "Shlwapi.h"
 
 #define FCB_SUCCESS			0
@@ -73,9 +72,6 @@ bool NormalizePath(char * path)														// Strips names to max 8 and extens
 
 Bit8u DOS_GetDefaultDrive(void)
 	{
-	Bit8u d = DOS_SDA(DOS_SDA_SEG, DOS_SDA_OFS).GetDrive();
-	if (d != dos.current_drive)
-		LOG(LOG_DOSMISC,LOG_ERROR)("SDA drive %d not the same as dos.current_drive %d", d, dos.current_drive);
 	return dos.current_drive;
 	}
 
@@ -341,7 +337,6 @@ bool DOS_FindNext(void)
 	Bit8u i = dta.GetSearchDrive();
 	if (i >= DOS_DRIVES || !Drives[i])												// Corrupt search.
 		{
-		LOG(LOG_FILES,LOG_ERROR)("Corrupt search!!!!");
 		DOS_SetError(DOSERR_NO_MORE_FILES); 
 		return false;
 		} 
@@ -357,7 +352,7 @@ bool DOS_ReadFile(Bit16u entry, Bit8u* data, Bit16u* amount)
 		return false;
 		}
 	return Files[handle]->Read(data, amount);
-}
+	}
 
 bool DOS_WriteFile(Bit16u entry, Bit8u* data, Bit16u* amount)
 	{
@@ -619,9 +614,8 @@ bool DOS_GetFileAttr(char const* const name, Bit16u* attr)
 	}
 
 bool DOS_SetFileAttr(char const* const name, Bit16u /*attr*/) 
-	// this function does not change the file attributs
-	// it just does some tests if file is available 
-	// returns false when using on cdrom (stonekeep)
+	// This function does not change the file attributs
+	// It just tests if file is available 
 	{
 	char fullname[DOS_PATHLENGTH];
 	Bit8u drive;
@@ -1302,7 +1296,6 @@ void DOS_SetupFiles(void)
 	Files = new DOS_File* [DOS_FILES];												// Setup the File Handles
 	for (int i = 0; i < DOS_FILES; i++)
 		Files[i] = 0;
-	for (int i = 0; i < DOS_DRIVES-1; i++)											// Setup the Virtual Disk System
+	for (int i = 0; i < DOS_DRIVES; i++)											// Setup the Virtual Disk System
 		Drives[i] = 0;
-	Drives[DOS_DRIVES-1] = new Virtual_Drive();
 	}

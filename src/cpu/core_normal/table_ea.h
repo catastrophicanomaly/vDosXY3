@@ -28,43 +28,57 @@ static PhysPt EA_16_85_n(void) { return BaseDS+(Bit16u)(reg_di+Fetchws()); }
 static PhysPt EA_16_86_n(void) { return BaseSS+(Bit16u)(reg_bp+Fetchws()); }
 static PhysPt EA_16_87_n(void) { return BaseDS+(Bit16u)(reg_bx+Fetchws()); }
 
-static Bit32u SIBZero=0;
-static Bit32u * SIBIndex[8]= { &reg_eax,&reg_ecx,&reg_edx,&reg_ebx,&SIBZero,&reg_ebp,&reg_esi,&reg_edi };
+static Bit32u SIBZero = 0;
+static Bit32u * SIBIndex[8]= {&reg_eax, &reg_ecx, &reg_edx, &reg_ebx, &SIBZero, &reg_ebp, &reg_esi, &reg_edi};
 
-static PhysPt Sib(Bitu mode) {
-	Bit8u sib=Fetchb();
+static PhysPt Sib(bool mode)
+	{
+	Bit8u sib = Fetchb();
 	PhysPt base;
-	switch (sib&7) {
-	case 0:	/* EAX Base */
-		base=BaseDS+reg_eax;break;
-	case 1:	/* ECX Base */
-		base=BaseDS+reg_ecx;break;
-	case 2:	/* EDX Base */
-		base=BaseDS+reg_edx;break;
-	case 3:	/* EBX Base */
-		base=BaseDS+reg_ebx;break;
-	case 4:	/* ESP Base */
-		base=BaseSS+reg_esp;break;
-	case 5:	/* #1 Base */
-		if (!mode) {
-			base=BaseDS+Fetchd();break;
-		} else {
-			base=BaseSS+reg_ebp;break;
+	switch (sib&7)
+		{
+	case 0:																			// EAX Base
+		base = BaseDS+reg_eax;
+		break;
+	case 1:																			// ECX Base
+		base = BaseDS+reg_ecx;
+		break;
+	case 2:																			// EDX Base
+		base = BaseDS+reg_edx;
+		break;
+	case 3:																			//* EBX Base
+		base = BaseDS+reg_ebx;
+		break;
+	case 4:																			// ESP Base
+		base = BaseSS+reg_esp;
+		break;
+	case 5:																			// #1 Base
+		if (!mode)
+			{
+			base = BaseDS+Fetchd();
+			break;
+			}
+		else
+			{
+			base = BaseSS+reg_ebp;
+			break;
+			}
+	case 6:																			// ESI Base
+		base = BaseDS+reg_esi;
+		break;
+	case 7:																			// EDI Base
+		base = BaseDS+reg_edi;
+		break;
 		}
-	case 6:	/* ESI Base */
-		base=BaseDS+reg_esi;break;
-	case 7:	/* EDI Base */
-		base=BaseDS+reg_edi;break;
-	}
-	base+=*SIBIndex[(sib >> 3) &7] << (sib >> 6);
+	base += *SIBIndex[(sib>>3)&7]<<(sib>>6);
 	return base;
-}
+	}
 
 static PhysPt EA_32_00_n(void) { return BaseDS+reg_eax; }
 static PhysPt EA_32_01_n(void) { return BaseDS+reg_ecx; }
 static PhysPt EA_32_02_n(void) { return BaseDS+reg_edx; }
 static PhysPt EA_32_03_n(void) { return BaseDS+reg_ebx; }
-static PhysPt EA_32_04_n(void) { return Sib(0);}
+static PhysPt EA_32_04_n(void) { return Sib(false);}
 static PhysPt EA_32_05_n(void) { return BaseDS+Fetchd(); }
 static PhysPt EA_32_06_n(void) { return BaseDS+reg_esi; }
 static PhysPt EA_32_07_n(void) { return BaseDS+reg_edi; }
@@ -73,8 +87,7 @@ static PhysPt EA_32_40_n(void) { return BaseDS+reg_eax+Fetchbs(); }
 static PhysPt EA_32_41_n(void) { return BaseDS+reg_ecx+Fetchbs(); }
 static PhysPt EA_32_42_n(void) { return BaseDS+reg_edx+Fetchbs(); }
 static PhysPt EA_32_43_n(void) { return BaseDS+reg_ebx+Fetchbs(); }
-static PhysPt EA_32_44_n(void) { PhysPt temp=Sib(1);return temp+Fetchbs();}
-//static PhysPt EA_32_44_n(void) { return Sib(1)+Fetchbs();}
+static PhysPt EA_32_44_n(void) { PhysPt temp=Sib(true);return temp+Fetchbs();}
 static PhysPt EA_32_45_n(void) { return BaseSS+reg_ebp+Fetchbs(); }
 static PhysPt EA_32_46_n(void) { return BaseDS+reg_esi+Fetchbs(); }
 static PhysPt EA_32_47_n(void) { return BaseDS+reg_edi+Fetchbs(); }
@@ -83,8 +96,7 @@ static PhysPt EA_32_80_n(void) { return BaseDS+reg_eax+Fetchds(); }
 static PhysPt EA_32_81_n(void) { return BaseDS+reg_ecx+Fetchds(); }
 static PhysPt EA_32_82_n(void) { return BaseDS+reg_edx+Fetchds(); }
 static PhysPt EA_32_83_n(void) { return BaseDS+reg_ebx+Fetchds(); }
-static PhysPt EA_32_84_n(void) { PhysPt temp=Sib(2);return temp+Fetchds();}
-//static PhysPt EA_32_84_n(void) { return Sib(2)+Fetchds();}
+static PhysPt EA_32_84_n(void) { PhysPt temp=Sib(true);return temp+Fetchds();}
 static PhysPt EA_32_85_n(void) { return BaseSS+reg_ebp+Fetchds(); }
 static PhysPt EA_32_86_n(void) { return BaseDS+reg_esi+Fetchds(); }
 static PhysPt EA_32_87_n(void) { return BaseDS+reg_edi+Fetchds(); }
@@ -158,10 +170,9 @@ static GetEAHandler EATable[512]={
 
 #define GetEADirect							\
 	PhysPt eaa;								\
-	if (TEST_PREFIX_ADDR) {					\
-		eaa=BaseDS+Fetchd();				\
-	} else {								\
-		eaa=BaseDS+Fetchw();				\
-	}										\
+	if (!TEST_PREFIX_ADDR)					\
+		eaa = BaseDS+Fetchw();				\
+	else									\
+		eaa = BaseDS+Fetchd();
 
 

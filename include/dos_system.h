@@ -94,28 +94,33 @@ private:
 class DOS_Drive
 	{
 public:
-	DOS_Drive();
+//	DOS_Drive();
+	DOS_Drive(const char* startdir,  Bit8u driveNo);
 	virtual ~DOS_Drive()	{ };
-	virtual bool FileOpen(DOS_File * * file, char * name, Bit32u flags) = 0;
-	virtual bool FileCreate(DOS_File * * file, char * name, Bit16u attributes) = 0;
-	virtual bool FileUnlink(char * _name) = 0;
-	virtual bool RemoveDir(char * _dir) = 0;
-	virtual bool MakeDir(char * _dir) = 0;
-	virtual bool TestDir(char * _dir) = 0;
-	virtual bool FindFirst(char * _dir, DOS_DTA & dta, bool fcb_findfirst = false) = 0;
-	virtual bool FindNext(DOS_DTA & dta) = 0;
-	virtual bool GetFileAttr(char * name, Bit16u * attr) = 0;
-	virtual bool Rename(char * oldname, char * newname) = 0;
-	virtual bool AllocationInfo(Bit16u * _bytes_sector, Bit8u * _sectors_cluster, Bit16u * _total_clusters, Bit16u * _free_clusters) = 0;
-	virtual bool FileExists(const char* name) = 0;
+	void SetBaseDir(const char* startdir);
+	bool FileCreate(DOS_File * * file, char * name, Bit16u attributes);
+	bool FileOpen(DOS_File * * file, char * name, Bit32u flags);
+	bool AllocationInfo(Bit16u * _bytes_sector, Bit8u * _sectors_cluster, Bit16u * _total_clusters, Bit16u * _free_clusters);
+	bool FileExists(const char* name);
+	bool FileUnlink(char * _name);
+	bool FindFirst(char * _dir, DOS_DTA & dta, bool fcb_findfirst = false);
+	bool FindNext(DOS_DTA & dta);
+	bool GetFileAttr(char * name, Bit16u * attr);
+	bool MakeDir(char * _dir);
+	bool RemoveDir(char * _dir);
+	bool Rename(char * oldname, char * newname);
+	bool TestDir(char* dir);
 
+	char*		GetWinDir(void) { return basedir; };
 	char*		GetLabel(void) { return label; };
+	char		basedir[MAX_PATH_LEN];
 	Bit32u		VolSerial;
-	char *		GetInfo(void);
 	char		curdir[DOS_PATHLENGTH];
-	char		info[256];
 	char		label[14];
 	bool		remote;
+
+private:
+	char srch_dir[MAX_PATH_LEN];
 	};
 
 enum {OPEN_READ = 0, OPEN_WRITE = 1, OPEN_READWRITE = 2, DOS_NOT_INHERIT = 128};
@@ -132,5 +137,6 @@ typedef bool (MultiplexHandler)(void);
 // AddDevice stores the pointer to a created device
 void DOS_AddDevice(DOS_Device * adddev);
 
-void VFILE_Register(const char * name, Bit8u * data, Bit16u size);
+bool WildFileCmp(const char * file, const char * wild);
+
 #endif

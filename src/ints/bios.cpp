@@ -10,7 +10,6 @@
 
 static Bitu INT1A_Handler(void)
 	{
-	CALLBACK_SIF(true);
 	switch (reg_ah)
 		{
 	case 0x00:																		// Get system time
@@ -21,9 +20,8 @@ static Bitu INT1A_Handler(void)
 		Mem_Stosb(BIOS_24_HOURS_FLAG, 0);											// Reset the midnight flag
 		break;
 		}
-	case 0x01:																		// Set system time
-		Mem_Stosw(BIOS_TIMER, reg_dx);
-		Mem_Stosw(BIOS_TIMER+2, reg_cx);
+	case 0x01:																		// Set system time, we don't
+		Mem_Stosb(BIOS_24_HOURS_FLAG, 0);											// Reset the midnight flag
 		break;
 	case 0x02:																		// Get real-time clock time in BCD (AT, XT286, PS)
 		{
@@ -57,7 +55,7 @@ static Bitu INT11_Handler(void)
 	return CBRET_NONE;
 	}
 
-static void BIOS_HostTimeSync()
+bool BIOS_HostTimeSync()
 	{
 	_SYSTEMTIME systime;															// Windows localdate/time
 	GetLocalTime(&systime);
@@ -70,18 +68,10 @@ static void BIOS_HostTimeSync()
 		systime.wMinute*60*1000+
 		systime.wSecond*1000+ 
 		systime.wMilliseconds))*(((double)PIT_TICK_RATE/65536.0)/1000.0));
+	if (ticks == Mem_Lodsd(BIOS_TIMER))
+		return false;																// Already in sync			
 	Mem_Stosd(BIOS_TIMER, ticks);
-	}
-
-static Bitu INT8_Handler(void)
-	{
-	BIOS_HostTimeSync();
-	return CBRET_NONE;
-	}
-
-static Bitu INT1C_Handler(void)
-	{
-	return CBRET_NONE;
+	return true;
 	}
 
 static Bitu INT12_Handler(void)
@@ -148,7 +138,7 @@ static Bitu INT15_Handler(void)
 	case 0xC0:																		// Get Configuration
 		{
 		if (biosConfigSeg == 0)
-			biosConfigSeg = DOS_GetPrivatMemory(1);										// We have 16 bytes
+			biosConfigSeg = DOS_GetPrivatMemory(1);									// We have 16 bytes
 		PhysPt data	= SegOff2Ptr(biosConfigSeg, 0);
 		Mem_Stosw(data, 8);															// 8 Bytes following
 		Mem_Stosb(data+2, 0xFC);													// Model ID (PC)
@@ -174,8 +164,8 @@ static Bitu INT15_Handler(void)
 		CALLBACK_SCF(false);
 		break;
 		}
-	case 0x88:																		// SYSTEM - Get extended memory size (286+)
-		reg_ax = 0;
+	case 0x88:																		// SYSTEM - Get extended memory size in KB (286+)
+		reg_ax = TotEXTMB*1024;
 		CALLBACK_SCF(false);
 		break;
 	default:
@@ -183,11 +173,6 @@ static Bitu INT15_Handler(void)
 		reg_ah = 0x86;
 		CALLBACK_SCF(true);
 		}
-	return CBRET_NONE;
-	}
-
-static Bitu Reboot_Handler(void)
-	{
 	return CBRET_NONE;
 	}
 
@@ -226,8 +211,7 @@ void BIOS_Init()
 	Mem_rStosb(0x400, 0, 0x200);													// Clear the Bios Data Area (0x400-0x5ff, 0x600- is accounted to DOS)
 
 	// Setup all the interrupt handlers the Bios controls
-	Bitu cbID = CALLBACK_Allocate();												// INT 8 Clock IRQ handler
-	CALLBACK_Setup(cbID, &INT8_Handler, CB_IRQ0, dWord2Ptr(BIOS_DEFAULT_IRQ0_LOCATION));
+	CALLBACK_SetupExtra(0, CB_IRQ0, dWord2Ptr(BIOS_DEFAULT_IRQ0_LOCATION));
 	RealSetVec(0x08, BIOS_DEFAULT_IRQ0_LOCATION);
 	BIOS_HostTimeSync();															// Initialize the timer ticks
 
@@ -241,7 +225,7 @@ void BIOS_Init()
 
 	CALLBACK_Install(0x14, &INT14_Handler, CB_IRET_STI);							// INT 14 Serial ports
 
-	CALLBACK_Install(0x15, &INT15_Handler, CB_IRET);								// INT 15 Misc calls
+	CALLBACK_Install(0x15, &INT15_Handler, CB_IRET_STI);							// INT 15 Misc calls
 
 	BIOS_SetupKeyboard();															// INT 16 Keyboard handled in another file
 
@@ -249,21 +233,17 @@ void BIOS_Init()
 
 	CALLBACK_Install(0x1a, &INT1A_Handler, CB_IRET_STI);							// INT 1A Time and some other functions
 
-	CALLBACK_Install(0x1c, &INT1C_Handler, CB_IRET);								// INT 1C System timer tick called from INT 8
-		
-	CALLBACK_Install(0x71, NULL, CB_IRQ9);											// Irq 9 rerouted to irq 2
-
-	cbID = CALLBACK_Allocate();														// Reboot dummy
-	CALLBACK_Setup(cbID, &Reboot_Handler, CB_IRET);
-	RealPt rptr = CALLBACK_RealPointer(cbID);
-	RealSetVec(0x18, rptr);
-	RealSetVec(0x19, rptr);
+//	These are already setup as dummy by CALLBACK_Init()
+//	CALLBACK_SetupDummyIRET(0x1c);													// INT 1C System timer tick called from INT 8
+//	CALLBACK_Install(0x71, NULL, CB_IRQ9);											// Irq 9 rerouted to irq 2
+//	CALLBACK_SetupDummyIRET(0x18);													// Reboot dummies
+//	CALLBACK_SetupDummyIRET(0x19);
 
 	// set system BIOS entry point too
-	Mem_aStosb(0xffff0, 0xEA);														// FARJMP
-	Mem_aStosd(0xffff1, rptr);
+	Mem_aStosb(0xffff0, 0xEA);														// FAR JMP
+	Mem_aStosd(0xffff1, Mem_Lodsd(0x18*4));
 
-	cbID = CALLBACK_Allocate();														// Irq 2
+	Bitu cbID = CALLBACK_Allocate();												// Irq 2
 	CALLBACK_Setup(cbID, NULL, CB_IRET_EOI_PIC1, dWord2Ptr(BIOS_DEFAULT_IRQ2_LOCATION));
 	RealSetVec(0x0a, BIOS_DEFAULT_IRQ2_LOCATION);
 

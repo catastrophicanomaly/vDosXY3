@@ -6,11 +6,6 @@
 #include "lazyflags.h"
 #include "inout.h"
 #include "callback.h"
-#include "pic.h"
-#include "paging.h"
-
-#define CPU_PIC_CHECK 0
-#define CPU_TRAP_CHECK 1
 
 #define OPCODE_NONE			0x000
 #define OPCODE_0F			0x100
@@ -19,13 +14,13 @@
 #define PREFIX_ADDR			0x1
 #define PREFIX_REP			0x2
 
-#define TEST_PREFIX_ADDR	(core.prefixes & PREFIX_ADDR)
-#define TEST_PREFIX_REP		(core.prefixes & PREFIX_REP)
+#define TEST_PREFIX_ADDR	(core.prefixes&PREFIX_ADDR)
+#define TEST_PREFIX_REP		(core.prefixes&PREFIX_REP)
 
-#define DO_PREFIX_SEG(_SEG)					\
-	BaseDS = SegBase(_SEG);					\
-	BaseSS = SegBase(_SEG);					\
-	core.base_val_ds = _SEG;				\
+#define DO_PREFIX_SEG(_SEG)								\
+	BaseDS = SegBase(_SEG);								\
+	BaseSS = SegBase(_SEG);								\
+	core.base_val_ds = _SEG;							\
 	goto restart_opcode;
 
 #define DO_PREFIX_ADDR()								\
@@ -34,9 +29,9 @@
 	core.ea_table = &EATable[(core.prefixes&1) * 256];	\
 	goto restart_opcode;
 
-#define DO_PREFIX_REP(_ZERO)				\
-	core.prefixes |= PREFIX_REP;			\
-	core.rep_zero = _ZERO;					\
+#define DO_PREFIX_REP(_ZERO)							\
+	core.prefixes |= PREFIX_REP;						\
+	core.rep_zero = _ZERO;								\
 	goto restart_opcode;
 
 typedef PhysPt (*GetEAHandler)(void);
@@ -70,33 +65,40 @@ union {
 
 __forceinline static Bit8u Fetchb()
 	{
-	Bitu cOffset = core.cseip-fetchAddr;
-	if (cOffset > 3)
-		{
-		fetchAddr = core.cseip&~3;
+    Bit32u newAddr = core.cseip&~3;
+    if (newAddr != fetchAddr)
+        {
+		fetchAddr = newAddr;
 		fetchCache.dword = Mem_Lodsd(fetchAddr);
-		cOffset = core.cseip-fetchAddr;
-		}
+        }
+	Bitu cOffset = core.cseip-newAddr;
 	core.cseip += 1;
 	return fetchCache.byte[cOffset];	
 	}
 
-__forceinline static Bit16u Fetchw()
+static Bit16u Fetchw()
 	{
-	Bitu cOffset = core.cseip&3;
+	Bit32u newAddr = core.cseip&~3;
+	Bit32u cOffset = core.cseip-newAddr;
 	if (cOffset < 3)
 		{
-		if (core.cseip-fetchAddr > 3)
+		if (newAddr != fetchAddr)
 			{
-			fetchAddr = core.cseip-cOffset;
+			fetchAddr = newAddr;
 			fetchCache.dword = Mem_Lodsd(fetchAddr);
 			}
 		core.cseip += 2;
 		return *(Bit16u*)(&fetchCache.byte[cOffset]);	
 		}
-	Bit16u temp = Mem_Lodsw(core.cseip);
+	Bit16u temp;
+	if (newAddr == fetchAddr)
+		temp = fetchCache.byte[3];
+	else
+		temp = Mem_Lodsb(core.cseip);
+	fetchAddr = newAddr+4;
+	fetchCache.dword = Mem_Lodsd(fetchAddr);
 	core.cseip += 2;
-	return temp;
+    return temp+(fetchCache.byte[0]<<8);
 	}
 
 __forceinline static Bit32u Fetchd()
@@ -125,7 +127,7 @@ Bits CPU_Core_Normal_Run(void)
 		BaseSS = SegBase(ss);
 		core.base_val_ds = ds;
 restart_opcode:
-//lastOpcode = core.opcode_index+Fetchb();
+//		lastOpcode = core.opcode_index+Fetchb();
 //		switch (lastOpcode)
 		switch (core.opcode_index+Fetchb())
 			{
@@ -161,16 +163,5 @@ Bits CPU_Core_Normal_Trap_Run(void)
 	CPU_Cycles = oldCycles-1;
 	cpudecoder = &CPU_Core_Normal_Run;
 
-	return ret;
-	}
-
-Bits PageFaultCore(void)
-	{
-	CPU_CycleLeft += CPU_Cycles;
-	CPU_Cycles = 1;
-	Bits ret = CPU_Core_Normal_Run();
-	CPU_CycleLeft += CPU_Cycles;
-	if (ret<0)
-		E_Exit("Got a vDos close machine in pagefault core?");
 	return ret;
 	}

@@ -4,7 +4,6 @@
 // icon resource
 vDOS_ico ICON "vDos.ico"
 
-
 // version resource
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 0,8,0,0

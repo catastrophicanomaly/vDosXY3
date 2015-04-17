@@ -29,12 +29,11 @@
 #define _SDL_events_h
 
 #include "SDL_stdinc.h"
-#include "SDL_error.h"
-#include "SDL_active.h"
+//#include "SDL_error.h"
+//#include "SDL_active.h"
 #include "SDL_keyboard.h"
 #include "SDL_mouse.h"
-#include "SDL_joystick.h"
-#include "SDL_quit.h"
+//#include "SDL_quit.h"
 
 #include "begin_code.h"
 /* Set up for C function definitions, even when using C++ */

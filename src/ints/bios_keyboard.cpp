@@ -161,7 +161,7 @@ static void add_key(Bit16u code)
 		BIOS_AddKeyToBuffer(code);
 	}
 
-static bool get_key(Bit16u &code)
+ bool BIOS_GetKey(Bit16u &code)
 	{
 	Bit16u head	= Mem_Lodsw(BIOS_KEYBOARD_BUFFER_HEAD);
 	if (head == Mem_Lodsw(BIOS_KEYBOARD_BUFFER_TAIL))
@@ -220,12 +220,11 @@ void UpdateKBflags()																// At least L.Shift + R.Shift are not captur
 
 void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed)
 	{
-	// We should call Int 0x15, to inform programs that has redirected this
+	// We should call Int 0x15, to inform programs that has redirected this???
 //	reg_ah = 0x4f;									// KEYBOARD INTERCEPT (translate scancode)
 //	reg_al = scancode;
-//	CALLBACK_SCF(true);								// Wrong, should be setting the falg directly
+//	CALLBACK_SCF(true);								// Wrong, should be setting the flag directly
 //	CALLBACK_RunRealInt(0x15);
-
 	UpdateKBflags();
 	if (!pressed)
 		{
@@ -291,7 +290,7 @@ void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed)
 //		unicode = 0x20ac;
 //	else if (flags1&0x08)															// Alt down
 //	else if (flags2&0x02)															// Left Alt down
-//	if (flags2&0x03 && !(flags2&0x1))															// Left Alt down w/o Left Ctrl (=Right Alt)
+//	if (flags2&0x03 && !(flags2&0x1))												// Left Alt down w/o Left Ctrl (=Right Alt)
 	if ((flags2&0x03) == 2)															// Left Alt down w/o Left Ctrl (=Right Alt)
 		{
 		if (scancode >= 2 && scancode <= 13)										// Top row '1' - '='
@@ -358,27 +357,34 @@ static Bitu INT16_Handler(void)
 	{
 	Bit16u temp = 0;
 	UpdateKBflags();
+
 	switch (reg_ah)
 		{
 	case 0x00:																		// Get keystroke
-		if ((get_key(temp)) && (!IsEnhancedKey(temp)))								// Normal key found, return translated key in AX
+		if ((BIOS_GetKey(temp)) && (!IsEnhancedKey(temp)))							// Normal key found, return translated key in AX
 			{
 			VGA_ResetVertTimer(pastedHead != pastedTail && temp != 0x1c0d && pastedData[pastedHead+1] != 13); // Hide them till Enter (at least WP 6 is that sluggish, we can't hide till all)
 			reg_ax = temp;
 			}
 		else
-			reg_ip += 1;															// Consume some cycles to allow irqs to happen
+			{
+			CPU_Cycles -= 100;														// Consume some cycles to allow the virtual PC to fall out
+			reg_ip += 1;															// Jump back into INT16
+			}
 		break;
 	case 0x10:																		// Get keystroke (enhanced keyboards only)
-		if (get_key(temp))
+		if (BIOS_GetKey(temp))
 			{
 			if (((temp&0xff) == 0xf0) && (temp>>8))									// Special enhanced key, clear low part before returning key
 				temp &= 0xff00;
-			reg_ax = temp;
 			VGA_ResetVertTimer(pastedHead != pastedTail && temp != 0x1c0d && pastedData[pastedHead+1] != 13);
+			reg_ax = temp;
 			}
 		else
-			reg_ip += 1;															// Consume some cycles to allow irqs to happen
+			{
+			CPU_Cycles -= 100;														// Consume some cycles to allow the virtual PC to fall out
+			reg_ip += 1;															// Jump back into INT16
+			}
 		break;
 	case 0x01:																		// Check for keystroke
 		for (;;)
@@ -392,7 +398,7 @@ static Bitu INT16_Handler(void)
 					break;
 					}
 				else																// Remove enhanced key from buffer and ignore it
-					get_key(temp);
+					BIOS_GetKey(temp);
 				}
 			else																	// No key available
 				{

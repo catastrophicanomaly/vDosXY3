@@ -10,46 +10,29 @@ enum STRING_OP {
 
 #define LoadD(_BLAH) _BLAH
 #define R_OPTAT 6
-#define R_OPTCOR() if (CPU_Cycles > 0) CPU_Cycles += (count>>1)+(count>>2)-2		// CPU time corrects to ~25%
-//#define R_OPTCOR() if (CPU_Cycles > 0) CPU_Cycles += (count*4)/5-2
+#define R_OPTCOR() if (CPU_Cycles > 0) CPU_Cycles += (count>>1)+(count>>2)			// CPU time corrects to ~25%
 #define BaseDI SegBase(es)
 #define BaseSI BaseDS
 
 static void DoString(STRING_OP type)
 	{
-	Bitu	si_index, di_index;
-	Bitu	add_mask;
-	Bitu	count;
+	Bitu si_index, di_index;
 
-	add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
-	if (!TEST_PREFIX_REP)
-		count = 1;
-	else
-		{
-		count = reg_ecx&add_mask;
-		if (count == 0)																// Seems to occur sometimes (calculated CX)
-			return;																	// Also required for do...while handling single operations
-		CPU_Cycles++;
-		if (type < R_SCASB)															// Won't interrupt scas and cmps instruction since they can interrupt themselves
-			{																		// So they are also not limited to use cycles!
-			if (count > (Bitu)CPU_Cycles)											// Calculate amount of ops to do before cycles run out
+	Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+	Bitu count = reg_ecx&add_mask;
+	if (count == 0)																	// Seems to occur sometimes (calculated CX)
+		return;																		// Also required for do...while handling single operations
+	if (type < R_SCASB)																// Won't interrupt scas and cmps instruction since they can interrupt themselves
+		{																			// So they are also not limited to use cycles!
+		reg_ecx &= ~add_mask;
+		if (count > (Bitu)CPU_Cycles)												// Calculate amount of ops to do before cycles run out
+			if (count-(Bitu)CPU_Cycles > (Bitu)CPU_CycleMax/16)
 				{
-				if (count-(Bitu)CPU_Cycles > (Bitu)CPU_CycleMax/16)
-					{
-					reg_ecx = (reg_ecx&~add_mask)|(count-CPU_Cycles);
-					count = CPU_Cycles;
-					LOADIP;															// Reset IP to the start
-					}
-				else
-					reg_ecx &= ~add_mask;
-				CPU_Cycles = 0;
+				reg_ecx |= (count-CPU_Cycles);
+				count = CPU_Cycles;
+				LOADIP;																// Reset IP to the start
 				}
-			else
-				{																	// So they are also not limited to use cycles!
-				CPU_Cycles -= count;
-				reg_ecx &= ~add_mask;
-				}
-			}
+		CPU_Cycles -= count;
 		}
 	Bits add_index = cpu.direction;
 
@@ -124,16 +107,14 @@ static void DoString(STRING_OP type)
 		di_index = reg_edi&add_mask;
 		if (count >= R_OPTAT && add_index > 0)										// Try to optimize if direction is up (down is used rarely)
 			{
-			Bitu di_newindex = di_index+(add_index*count)-add_index;
-			Bitu si_newindex = si_index+(add_index*count)-add_index;
+			Bitu di_newindex = di_index+count-1;
+			Bitu si_newindex = si_index+count-1;
 			if (((di_newindex|si_newindex)&add_mask) == (di_newindex|si_newindex))	// If no wraparounds, use Mem_rMovsb()
 				{
-				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count);
-				di_index = (di_newindex+add_index)&add_mask;
-				si_index = (si_newindex+add_index)&add_mask;
 				R_OPTCOR();
-				reg_esi = (reg_esi&~add_mask)|si_index;
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count);
+				reg_esi = (reg_esi&~add_mask)|((si_newindex+1)&add_mask);
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+1)&add_mask);
 				break;
 				}
 			}
@@ -149,25 +130,22 @@ static void DoString(STRING_OP type)
 		break;
 	case R_MOVSW:
 		{
-		add_index <<= 1;
 		si_index = reg_esi&add_mask;
 		di_index = reg_edi&add_mask;
 		if (count >= R_OPTAT && add_index > 0)										// Try to optimize if direction is up
 			{
-			Bitu di_newindex = di_index+(add_index*count)-add_index;
-			Bitu si_newindex = si_index+(add_index*count)-add_index;
+			Bitu di_newindex = di_index+(count*2)-2;
+			Bitu si_newindex = si_index+(count*2)-2;
 			if (((di_newindex|si_newindex)&add_mask) == (di_newindex|si_newindex))	// If no wraparounds, use Mem_rMovsb()
 				{
-//				Mem_rMovsw(BaseDI+di_index, BaseSI+si_index, count);
-				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count*2);
-				di_index = (di_newindex+add_index)&add_mask;
-				si_index = (si_newindex+add_index)&add_mask;
 				R_OPTCOR();
-				reg_esi = (reg_esi&~add_mask)|si_index;
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count*2);
+				reg_esi = (reg_esi&~add_mask)|((si_newindex+2)&add_mask);
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+2)&add_mask);
 				break;
 				}
 			}
+		add_index <<= 1;
 		do																			// Count too low or SI/DI wraps around
 			{
 			Mem_Stosw(BaseDI+di_index, Mem_Lodsw(BaseSI+si_index));
@@ -180,25 +158,22 @@ static void DoString(STRING_OP type)
 		reg_edi = (reg_edi&~add_mask)|di_index;
 		break;
 	case R_MOVSD:
-		add_index <<= 2;
 		si_index = reg_esi&add_mask;
 		di_index = reg_edi&add_mask;
 		if (count >= R_OPTAT && add_index > 0)										// Try to optimize if direction is up
 			{
-			Bitu di_newindex = di_index+(add_index*count)-add_index;
-			Bitu si_newindex = si_index+(add_index*count)-add_index;
+			Bitu di_newindex = di_index+(count*4)-4;
+			Bitu si_newindex = si_index+(count*4)-4;
 			if (((di_newindex|si_newindex)&add_mask) == (di_newindex|si_newindex))	// If no wraparounds, use Mem_rMovsb()
 				{
-//				Mem_rMovsd(BaseDI+di_index, BaseSI+si_index, count);
-				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count*4);
-				di_index = (di_newindex+add_index)&add_mask;
-				si_index = (si_newindex+add_index)&add_mask;
 				R_OPTCOR();
-				reg_esi = (reg_esi&~add_mask)|si_index;
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				Mem_rMovsb(BaseDI+di_index, BaseSI+si_index, count*4);
+				reg_esi = (reg_esi&~add_mask)|((si_newindex+4)&add_mask);
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+4)&add_mask);
 				break;
 				}
 			}
+		add_index <<= 2;
 		do
 			{
 			Mem_Stosd(BaseDI+di_index, Mem_Lodsd(BaseSI+si_index));
@@ -249,10 +224,9 @@ static void DoString(STRING_OP type)
 			Bitu di_newindex = di_index+(add_index*count)-add_index;
 			if ((di_newindex&add_mask) == di_newindex)								// If no wraparound, use Mem_rStosb()
 				{
-				Mem_rStosb(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_al, count);
-				di_index = (di_newindex+add_index)&add_mask;
 				R_OPTCOR();
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				Mem_rStosb(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_al, count);
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+add_index)&add_mask);
 				break;
 				}
 			}
@@ -262,9 +236,9 @@ static void DoString(STRING_OP type)
 			di_index = (di_index+add_index)&add_mask;
 			}
 		while (--count);
-		}
 		reg_edi = (reg_edi&~add_mask)|di_index;
 		break;
+		}
 	case R_STOSW:
 		add_index <<= 1;
 		di_index = reg_edi&add_mask;
@@ -273,13 +247,12 @@ static void DoString(STRING_OP type)
 			Bitu di_newindex = di_index+(add_index*count)-add_index;
 			if ((di_newindex&add_mask) == di_newindex)								// If no wraparound, use Mem_rStosw()
 				{
+				R_OPTCOR();
 				if (reg_al == reg_ah)												// NB, memset runtime is 32 bits optimized
 					Mem_rStosb(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_al, count*2);
 				else
 					Mem_rStosw(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_ax, count);
-				di_index = (di_newindex+add_index)&add_mask;
-				R_OPTCOR();
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+add_index)&add_mask);
 				break;
 				}
 			}
@@ -296,6 +269,7 @@ static void DoString(STRING_OP type)
 		di_index = reg_edi&add_mask;
 		if (count >= R_OPTAT)														// Try to optimize
 			{
+			R_OPTCOR();
 			Bitu di_newindex = di_index+(add_index*count)-add_index;
 			if ((di_newindex&add_mask) == di_newindex)								// If no wraparound, use Mem_Stosd()
 				{
@@ -303,9 +277,7 @@ static void DoString(STRING_OP type)
 					Mem_rStosb(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_al, count*4);
 				else
 					Mem_rStosd(BaseDI+(add_index > 0 ? di_index : di_newindex), reg_eax, count);
-				di_index = (di_newindex+add_index)&add_mask;
-				R_OPTCOR();
-				reg_edi = (reg_edi&~add_mask)|di_index;
+				reg_edi = (reg_edi&~add_mask)|((di_newindex+add_index)&add_mask);
 				break;
 				}
 			}
@@ -330,8 +302,7 @@ static void DoString(STRING_OP type)
 		while (--count && (reg_al == val2) == core.rep_zero);
 		CPU_Cycles += count;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPB(reg_al, val2, LoadD, 0);
 		}
 		break;
@@ -349,8 +320,7 @@ static void DoString(STRING_OP type)
 		while (--count && (reg_ax == val2) == core.rep_zero);
 		CPU_Cycles += count;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPW(reg_ax, val2, LoadD, 0);
 		}
 		break;
@@ -368,8 +338,7 @@ static void DoString(STRING_OP type)
 		while (--count && (reg_eax == val2) == core.rep_zero);
 		CPU_Cycles += count;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPD(reg_eax, val2, LoadD, 0);
 		}
 		break;
@@ -390,8 +359,7 @@ static void DoString(STRING_OP type)
 		CPU_Cycles += count;
 		reg_esi = (reg_esi&~add_mask)|si_index;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPB(val1, val2, LoadD, 0);
 		}
 		break;
@@ -413,8 +381,7 @@ static void DoString(STRING_OP type)
 		CPU_Cycles += count;
 		reg_esi = (reg_esi&~add_mask)|si_index;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPW(val1, val2, LoadD, 0);
 		}
 		break;
@@ -436,8 +403,7 @@ static void DoString(STRING_OP type)
 		CPU_Cycles += count;
 		reg_esi = (reg_esi&~add_mask)|si_index;
 		reg_edi = (reg_edi&~add_mask)|di_index;
-		if (TEST_PREFIX_REP)
-			reg_ecx = (reg_ecx&~add_mask)|count;
+		reg_ecx = (reg_ecx&~add_mask)|count;
 		CMPD(val1, val2, LoadD, 0);
 		}
 		break;

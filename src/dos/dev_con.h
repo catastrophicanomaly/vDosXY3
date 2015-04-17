@@ -15,7 +15,7 @@ private:
 	Bit8u readcache;
 	Bit8u lastwrite;
 	void ClearAnsi(void);
-	struct ansi {		// should create a constructor which fills them with the appriorate values
+	struct ansi {
 		bool esc;
 		bool sci;
 		bool enabled;
@@ -31,8 +31,9 @@ private:
 
 bool device_CON::Read(Bit8u* data, Bit16u* size)
 	{
-	Bit16u oldax = reg_ax;
 	Bit16u count = 0;
+	Bit16u keyStroke;
+	Bit8u lowKey, highKey;
 	if ((readcache) && (*size))
 		{
 		data[count++] = readcache;
@@ -42,72 +43,69 @@ bool device_CON::Read(Bit8u* data, Bit16u* size)
 		}
 	while (*size > count)
 		{
-		while (true)
+		while (!BIOS_GetKey(keyStroke))												// Wait for keystroke
 			{
-			reg_ah = 1;							// Check for keystroke
-			CALLBACK_RunRealInt(0x16);
-			if (!GETFLAG(ZF))
-				break;
-			CALLBACK_Idle();					// To start vDos and let interrupts take place
+			CALLBACK_Idle();														// To start vDos and let interrupts take place (change this at some time!)
 			Sleep(2);
 			}
-		reg_ah = 0x10;
-		CALLBACK_RunRealInt(0x16);
-		switch (reg_al)
+		lowKey = keyStroke&0xff;
+		highKey = keyStroke>>8;
+		switch (lowKey)
 			{
 		case 13:
 			data[count++] = 0x0D;
 			if (*size > count)
-				data[count++] = 0x0A;			// It's only expanded if there is room for it. (NO cache)
+				data[count++] = 0x0A;												// It's only expanded if there is room for it. (NO cache)
 			*size = count;
-			reg_ax = oldax;
 			if (dos.echo)
 				{ 
-				INT10_TeletypeOutput(13, 7);	// Maybe don't do this (no need for it actually, but it's compatible)
+				INT10_TeletypeOutput(13, 7);										// Maybe don't do this (no need for it actually, but it's compatible)
 				INT10_TeletypeOutput(10, 7);
 				}
 			return true;
 			break;
 		case 8:
 			if (*size == 1)
-				data[count++] = reg_al;			// one char at the time so give back that BS
+				data[count++] = lowKey;												// one char at the time so give back that BS
 			else if (count)
-				{								// Remove data if it exists (extended keys don't go right)
+				{																	// Remove data if it exists (extended keys don't go right)
 				data[count--] = 0;
 				INT10_TeletypeOutput(8, 7);
 				INT10_TeletypeOutput(' ',7);
 				}
 			else
-				continue;						// no data read yet so restart whileloop.
+				continue;															// no data read yet so restart whileloop.
 			break;
-		case 0xe0:								// Extended keys in the int 16 0x10 case
-			if (!reg_ah)						// extended key if reg_ah isn't 0
-				data[count++] = reg_al;
+		case 0xe0:																	// Extended keys in the int 16 0x10 case
+			if (!highKey)															// Extended key if high isn't 0
+				data[count++] = lowKey;
 			else
 				{
 				data[count++] = 0;
 				if (*size > count)
-					data[count++] = reg_ah;
+					data[count++] = highKey;
 				else
-					readcache = reg_ah;
+					readcache = highKey;
 				}
 			break;
-		case 0:									// Extended keys in the int 16 0x0 case
-			data[count++] = reg_al;
-			if (*size > count)
-				data[count++] = reg_ah;
-			else
-				readcache = reg_ah;
+		case 0x0:																	// Special enhanced key
+			if (highKey)
+				{
+				data[count++] = 0;
+				if (*size > count)
+					data[count++] = highKey;
+				else
+					readcache = highKey;
+				}
 			break;
 		default:
-			data[count++] = reg_al;
+			data[count++] = lowKey;
 			break;
 			}
 		if (dos.echo)	
-			INT10_TeletypeOutput(reg_al, 7);	// what to do if *size==1 and character is BS ?????
+			INT10_TeletypeOutput(lowKey, 7);										// what to do if *size==1 and character is BS ?????
 		}
 	*size = count;
-	reg_ax = oldax;
 	return true;
 	}
 
@@ -351,22 +349,12 @@ void device_CON::Close()
 
 Bit16u device_CON::GetInformation(void)
 	{
-	Bit16u head = Mem_aLodsw(BIOS_KEYBOARD_BUFFER_HEAD);							// aLodsw to prevent parachute hide window to kick in
-	Bit16u tail = Mem_aLodsw(BIOS_KEYBOARD_BUFFER_TAIL);
+	Bit16u head = Mem_Lodsw(BIOS_KEYBOARD_BUFFER_HEAD);
+	Bit16u tail = Mem_Lodsw(BIOS_KEYBOARD_BUFFER_TAIL);
 
 	if ((head == tail) && !readcache)
-		return 0x80D3;	// No Key Available
-	if (readcache || Mem_Lodsw(0x40,head))
-		return 0x8093;	// Key Available
-
-	/* remove the zero from keyboard buffer */
-	Bit16u start = Mem_Lodsw(BIOS_KEYBOARD_BUFFER_START);
-	Bit16u end = Mem_Lodsw(BIOS_KEYBOARD_BUFFER_END);
-	head += 2;
-	if (head >= end)
-		head = start;
-	Mem_Stosw(BIOS_KEYBOARD_BUFFER_HEAD, head);
-	return 0x80D3;	// No Key Available
+		return 0x80D3;																// No Key Available
+	return 0x8093;																	// Key Available
 	}
 
 device_CON::device_CON()
@@ -376,8 +364,8 @@ device_CON::device_CON()
 	lastwrite = 0;
 	ansi.enabled = false;
 	ansi.attr = 0x7;
-	ansi.ncols = Mem_Lodsw(BIOSMEM_SEG, BIOSMEM_NB_COLS);		//should be updated once set/reset mode is implemented
-	ansi.nrows = Mem_Lodsb(BIOSMEM_SEG, BIOSMEM_NB_ROWS) + 1;
+	ansi.ncols = Mem_Lodsw(BIOSMEM_SEG, BIOSMEM_NB_COLS);
+	ansi.nrows = Mem_Lodsb(BIOSMEM_SEG, BIOSMEM_NB_ROWS)+1;
 	ansi.saverow = 0;
 	ansi.savecol = 0;
 	ClearAnsi();

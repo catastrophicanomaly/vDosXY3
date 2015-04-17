@@ -371,22 +371,62 @@
 	CASE_B(0x6c)												/* INSB */
 		if (CPU_IO_Exception(reg_dx, 1))
 			RUNEXCEPTION();
-		DoString(R_INSB);
+		if (TEST_PREFIX_REP)
+			DoString(R_INSB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosb(BaseDI+di_index, IO_ReadB(reg_dx));
+			Bits add_index = cpu.direction;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_W(0x6d)												/* INSW */
 		if (CPU_IO_Exception(reg_dx, 2))
 			RUNEXCEPTION();
-		DoString(R_INSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_INSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosw(BaseDI+di_index, IO_ReadW(reg_dx));
+			Bits add_index = cpu.direction<<1;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_B(0x6e)												/* OUTSB */
 		if (CPU_IO_Exception(reg_dx, 1))
 			RUNEXCEPTION();
-		DoString(R_OUTSB);
+		if (TEST_PREFIX_REP)
+			DoString(R_OUTSB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			IO_WriteB(reg_dx, Mem_Lodsb(BaseSI+si_index));
+			Bits add_index = cpu.direction;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			}
 		break;
 	CASE_W(0x6f)												/* OUTSW */
 		if (CPU_IO_Exception(reg_dx, 2))
 			RUNEXCEPTION();
-		DoString(R_OUTSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_OUTSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			IO_WriteW(reg_dx, Mem_Lodsw(BaseSI+si_index));
+			Bits add_index = cpu.direction<<1;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			}
 		break;
 	CASE_W(0x70)												/* JO */
 		JumpCond16_b(TFLG_O);
@@ -623,56 +663,40 @@
 	CASE_B(0x8a)												/* MOV Gb,Eb */
 		{	
 		GetRMrb;
-		if (rm >= 0xc0)
-			{
-			GetEArb;
-			*rmrb = *earb;
-			}
-		else
+		if (rm < 0xc0)
 			{
 			GetEAa;
 			*rmrb = Mem_Lodsb(eaa);
+			}
+		else
+			{
+			GetEArb;
+			*rmrb = *earb;
 			}
 		break;
 		}
 	CASE_W(0x8b)												/* MOV Gw,Ew */
 		{	
 		GetRMrw;
-		if (rm >= 0xc0)
-			{
-			GetEArw;
-			*rmrw = *earw;
-			}
-		else
+		if (rm < 0xc0)
 			{
 			GetEAa;
 			*rmrw = Mem_Lodsw(eaa);
+			}
+		else
+			{
+			GetEArw;
+			*rmrw = *earw;
 			}
 		break;
 		}
 	CASE_W(0x8c)												/* Mov Ew,Sw */
 		{
 		GetRM;
-		Bit16u val;
 		Bitu which = (rm>>3)&7;
-		switch (which)
-			{
-			case 0x00:					/* MOV Ew,ES */
-				val=SegValue(es);break;
-			case 0x01:					/* MOV Ew,CS */
-				val=SegValue(cs);break;
-			case 0x02:					/* MOV Ew,SS */
-				val=SegValue(ss);break;
-			case 0x03:					/* MOV Ew,DS */
-				val=SegValue(ds);break;
-			case 0x04:					/* MOV Ew,FS */
-				val=SegValue(fs);break;
-			case 0x05:					/* MOV Ew,GS */
-				val=SegValue(gs);break;
-			default:
-				LOG(LOG_CPU,LOG_ERROR)("CPU:8c:Illegal RM Byte");
-				goto illegal_opcode;
-			}
+		if (which > 5)
+			goto illegal_opcode;
+		Bit16u val = Segs.val[which];
 		if (rm >= 0xc0)
 			{
 			GetEArw;
@@ -690,10 +714,10 @@
 		// Little hack to always use segprefixed version
 		BaseDS = BaseSS = 0;
 		GetRMrw;
-		if (TEST_PREFIX_ADDR)
-			*rmrw = (Bit16u)(*EATable[256+rm])();
-		else
+		if (!TEST_PREFIX_ADDR)
 			*rmrw = (Bit16u)(*EATable[rm])();
+		else
+			*rmrw = (Bit16u)(*EATable[256+rm])();
 		break;
 		}
 	CASE_B(0x8e)												/* MOV Sw,Ew */
@@ -731,15 +755,15 @@
 		{
 		Bit16u val = CPU_Pop16();
 		GetRM;
-		if (rm >= 0xc0)
-			{
-			GetEArw;
-			*earw = val;
-			}
-		else
+		if (rm < 0xc0)
 			{
 			GetEAa;
 			Mem_Stosw(eaa, val);
+			}
+		else
+			{
+			GetEArw;
+			*earw = val;
 			}
 		break;
 		}
@@ -798,24 +822,25 @@
 		reg_ax = (Bit8s)reg_al;
 		break;
 	CASE_W(0x99)												/* CWD */
-		if (reg_ax & 0x8000)
-			reg_dx = 0xffff;
+		if (!(reg_ax&0x8000))
+			reg_dx = 0;
 		else
-			reg_dx=0;
+			reg_dx = 0xffff;
 		break;
 	CASE_W(0x9a)												/* CALL Ap */
-		{ 
+		{
 		FillFlags();
+//		union {Bit32u reg32; Bit16u reg16[2];};
+//		reg32 = Mem_Lodsd(core.cseip);
+//		CPU_CALL(false, reg16[1], reg16[0], reg_eip+5);
 		Bit16u newip = Fetchw();
 		Bit16u newcs = Fetchw();
 		CPU_CALL(false, newcs, newip, GETIP);
-#if CPU_TRAP_CHECK
 		if (GETFLAG(TF))
 			{	
 			cpudecoder = CPU_Core_Normal_Trap_Run;
 			return CBRET_NONE;
 			}
-#endif
 		continue;
 		}
 	CASE_B(0x9b)												/* WAIT */
@@ -825,17 +850,11 @@
 		break;
 	CASE_W(0x9d)												/* POPF */
 		CPU_POPF(false);
-#if CPU_TRAP_CHECK
 		if (GETFLAG(TF))
-			{	
+			{
 			cpudecoder = CPU_Core_Normal_Trap_Run;
 			goto decode_end;
 			}
-#endif
-#if	CPU_PIC_CHECK
-		if (GETFLAG(IF) && PIC_IRQCheck)
-			goto decode_end;
-#endif
 		break;
 	CASE_B(0x9e)												/* SAHF */
 		SETFLAGSb(reg_ah);
@@ -869,16 +888,72 @@
 		}
 		break;
 	CASE_B(0xa4)												/* MOVSB */
-		DoString(R_MOVSB);
+		if (TEST_PREFIX_REP)
+			DoString(R_MOVSB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosb(BaseDI+di_index, Mem_Lodsb(BaseSI+si_index));
+			Bits add_index = cpu.direction;
+			di_index = (di_index+add_index)&add_mask;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_W(0xa5)												/* MOVSW */
-		DoString(R_MOVSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_MOVSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosw(BaseDI+di_index, Mem_Lodsw(BaseSI+si_index));
+			Bits add_index = cpu.direction<<1;
+			di_index = (di_index+add_index)&add_mask;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_B(0xa6)												/* CMPSB */
-		DoString(R_CMPSB);
+		if (TEST_PREFIX_REP)
+			DoString(R_CMPSB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			Bitu di_index = reg_edi&add_mask;
+			Bit8u val1 = Mem_Lodsb(BaseSI+si_index);
+			Bit8u val2 = Mem_Lodsb(BaseDI+di_index);
+			Bits add_index = cpu.direction;
+			si_index = (si_index+add_index)&add_mask;
+			di_index = (di_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			CMPB(val1, val2, LoadD, 0);
+			}
 		break;
 	CASE_W(0xa7)												/* CMPSW */
-		DoString(R_CMPSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_CMPSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			Bitu di_index = reg_edi&add_mask;
+			Bit16u val1 = Mem_Lodsw(BaseSI+si_index);
+			Bit16u val2 = Mem_Lodsw(BaseDI+di_index);
+			Bits add_index = cpu.direction<<1;
+			si_index = (si_index+add_index)&add_mask;
+			di_index = (di_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			CMPW(val1, val2, LoadD, 0);
+			}
 		break;
 	CASE_B(0xa8)												/* TEST AL,Ib */
 		ALIb(TESTB);
@@ -887,22 +962,84 @@
 		AXIw(TESTW);
 		break;
 	CASE_B(0xaa)												/* STOSB */
-		DoString(R_STOSB);
+		if (TEST_PREFIX_REP)
+			DoString(R_STOSB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosb(BaseDI+di_index, reg_al);
+			Bits add_index = cpu.direction;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_W(0xab)												/* STOSW */
-		DoString(R_STOSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_STOSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Mem_Stosw(BaseDI+di_index, reg_ax);
+			Bits add_index = cpu.direction<<1;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			}
 		break;
 	CASE_B(0xac)												/* LODSB */
-		DoString(R_LODSB);
+		if (!TEST_PREFIX_REP)
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			reg_al = Mem_Lodsb(BaseSI+si_index);
+			Bits add_index = cpu.direction;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			}
+		else
+			DoString(R_LODSB);
 		break;
 	CASE_W(0xad)												/* LODSW */
-		DoString(R_LODSW);
+		if (TEST_PREFIX_REP)
+			DoString(R_LODSW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu si_index = reg_esi&add_mask;
+			reg_ax = Mem_Lodsw(BaseSI+si_index);
+			Bits add_index = cpu.direction<<1;
+			si_index = (si_index+add_index)&add_mask;
+			reg_esi = (reg_esi&~add_mask)|si_index;
+			}
 		break;
 	CASE_B(0xae)												/* SCASB */
-		DoString(R_SCASB);
+		if (TEST_PREFIX_REP)
+			DoString(R_SCASB);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Bit8u val2 = Mem_Lodsb(BaseDI+di_index);
+			Bits add_index = cpu.direction;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			CMPB(reg_al, val2, LoadD, 0);
+			}
 		break;
 	CASE_W(0xaf)												/* SCASW */
-		DoString(R_SCASW);
+		if (TEST_PREFIX_REP)
+			DoString(R_SCASW);
+		else
+			{
+			Bitu add_mask = AddrMaskTable[core.prefixes&PREFIX_ADDR];
+			Bitu di_index = reg_edi&add_mask;
+			Bit16u val2 = Mem_Lodsw(BaseDI+di_index);
+			Bits add_index = cpu.direction<<1;
+			di_index = (di_index+add_index)&add_mask;
+			reg_edi = (reg_edi&~add_mask)|di_index;
+			CMPW(reg_ax, val2, LoadD, 0);
+			}
 		break;
 	CASE_B(0xb0)												/* MOV AL,Ib */
 		reg_al = Fetchb();
@@ -990,30 +1127,31 @@
 	CASE_B(0xc6)												/* MOV Eb,Ib */
 		{
 		GetRM;
-		if (rm >= 0xc0)
-			{
-			GetEArb;
-			*earb = Fetchb();
-			}
-		else
+		if (rm < 0xc0)
 			{
 			GetEAa;
 			Mem_Stosb(eaa, Fetchb());
 			}
+		else
+			{
+			GetEArb;
+			*earb = Fetchb();
+			}
 		break;
+
 		}
 	CASE_W(0xc7)												/* MOV EW,Iw */
 		{
 		GetRM;
-		if (rm >= 0xc0)
-			{
-			GetEArw;
-			*earw = Fetchw();
-			}
-		else
+		if (rm < 0xc0)
 			{
 			GetEAa;
 			Mem_Stosw(eaa, Fetchw());
+			}
+		else
+			{
+			GetEArw;
+			*earw = Fetchw();
 			}
 		break;
 		}
@@ -1033,52 +1171,40 @@
 		{
 		Bitu words = Fetchw();
 		FillFlags();
-		CPU_RET(false, words, GETIP);
+		CPU_RET(false, words);
 		continue;
 		}
 	CASE_W(0xcb)												/* RETF */			
 		FillFlags();
-		CPU_RET(false, 0, GETIP);
+		CPU_RET(false, 0);
 		continue;
 	CASE_B(0xcc)												/* INT3 */
 		CPU_SW_Interrupt_NoIOPLCheck(3, GETIP);
-#if CPU_TRAP_CHECK
 		cpu.trap_skip = true;
-#endif
 		continue;
 	CASE_B(0xcd)												/* INT Ib */	
 		{
-		Bit8u num = Fetchb();
-		CPU_SW_Interrupt(num, GETIP);
-#if CPU_TRAP_CHECK
+		Bitu intNo = Fetchb();
+		CPU_SW_Interrupt(intNo, GETIP);							// NB: DON"T use Fetchb() in this call, it messes up GETIP in some configurations
 		cpu.trap_skip = true;
-#endif
 		continue;
 		}
 	CASE_B(0xce)												/* INTO */
 		if (get_OF())
 			{
 			CPU_SW_Interrupt(4, GETIP);
-#if CPU_TRAP_CHECK
 			cpu.trap_skip = true;
-#endif
 			continue;
 			}
 		break;
 	CASE_W(0xcf)												/* IRET */
 		{
-		CPU_IRET(false, GETIP);
-#if CPU_TRAP_CHECK
+		CPU_IRET(false);
 		if (GETFLAG(TF))
 			{	
 			cpudecoder = CPU_Core_Normal_Trap_Run;
 			return CBRET_NONE;
 			}
-#endif
-#if CPU_PIC_CHECK
-		if (GETFLAG(IF) && PIC_IRQCheck)
-			return CBRET_NONE;
-#endif
 		continue;
 		}
 	CASE_B(0xd0)												/* GRP2 Eb,1 */
@@ -1123,50 +1249,26 @@
 		}
 		break;
 	CASE_W(0xe0)												/* LOOPNZ */
-	SAVEIP;
-	if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx) && !get_ZF())
-		reg_ip += Fetchbs();
-	reg_ip += 1;
-	continue;
-//		if (TEST_PREFIX_ADDR)
-//			{
-//			JumpCond16_b(--reg_ecx && !get_ZF());
-//			}
-//		else
-//			{
-//			JumpCond16_b(--reg_cx && !get_ZF());
-//			}
-//		break;
+//		SAVEIP;
+		if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx) && !get_ZF())
+			reg_ip += Fetchbs();
+//		reg_ip += 1;
+		reg_ip += 2;
+		continue;
 	CASE_W(0xe1)												/* LOOPZ */
-	SAVEIP;
-	if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx) && get_ZF())
-		reg_ip += Fetchbs();
-	reg_ip += 1;
-	continue;
-//		if (TEST_PREFIX_ADDR)
-//			{
-//			JumpCond16_b(--reg_ecx && get_ZF());
-//			}
-//		else
-//			{
-//			JumpCond16_b(--reg_cx && get_ZF());
-//			}
-//		break;
+//		SAVEIP;
+		if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx) && get_ZF())
+			reg_ip += Fetchbs();
+//		reg_ip += 1;
+		reg_ip += 2;
+		continue;
 	CASE_W(0xe2)												/* LOOP */
-	SAVEIP;
-	if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx))
-		reg_ip += Fetchbs();
-	reg_ip += 1;
-	continue;
-//		if (TEST_PREFIX_ADDR)
-//			{
-//			JumpCond16_b(--reg_ecx);
-//			}
-//		else
-//			{
-//			JumpCond16_b(--reg_cx);
-//			}
-//		break;
+//		SAVEIP;
+		if ((TEST_PREFIX_ADDR ? --reg_ecx : --reg_cx))
+			reg_ip += Fetchbs();
+//		reg_ip += 1;
+		reg_ip += 2;
+		continue;
 	CASE_W(0xe3)												/* JCXZ */
 		JumpCond16_b(!(reg_ecx & AddrMaskTable[core.prefixes & PREFIX_ADDR]));
 	CASE_B(0xe4)												/* IN AL,Ib */
@@ -1212,23 +1314,22 @@
 	CASE_W(0xe9)												/* JMP Jw */
 		{ 
 		Bit16u addip = Fetchws();
-		SAVEIP;
-		reg_eip = (Bit16u)(reg_eip+addip);
+//		SAVEIP;
+//		reg_eip = (Bit16u)(reg_eip+addip);
+		reg_eip = (Bit16u)(reg_eip+3+addip);
 		continue;
 		}
 	CASE_W(0xea)												/* JMP Ap */
-		{ 
+		{
 		Bit16u newip = Fetchw();
 		Bit16u newcs = Fetchw();
 		FillFlags();
 		CPU_JMP(false, newcs, newip);
-#if CPU_TRAP_CHECK
 		if (GETFLAG(TF))
 			{	
 			cpudecoder = CPU_Core_Normal_Trap_Run;
 			return CBRET_NONE;
 			}
-#endif
 		continue;
 		}
 	CASE_W(0xeb)												/* JMP Jb */
@@ -1260,9 +1361,7 @@
 		break;						// FIXME: see case D_LOCK in core_full/load.h
 	CASE_B(0xf1)												/* ICEBP */
 		CPU_SW_Interrupt_NoIOPLCheck(1, GETIP);
-#if CPU_TRAP_CHECK
 		cpu.trap_skip = true;
-#endif
 		continue;
 	CASE_B(0xf2)												/* REPNZ */
 		DO_PREFIX_REP(false);	
@@ -1289,15 +1388,15 @@
 		case 0x00:											/* TEST Eb,Ib */
 		case 0x01:											/* TEST Eb,Ib Undocumented*/
 			{
-			if (rm >= 0xc0)
-				{
-				GetEArb;
-				TESTB(*earb, Fetchb(), LoadRb, 0)
-				}
-			else
+			if (rm < 0xc0)
 				{
 				GetEAa;
 				TESTB(eaa, Fetchb(), Mem_Lodsb, 0);
+				}
+			else
+				{
+				GetEArb;
+				TESTB(*earb, Fetchb(), LoadRb, 0)
 				}
 			break;
 			}
@@ -1358,15 +1457,15 @@
 		case 0x00:											/* TEST Ew,Iw */
 		case 0x01:											/* TEST Ew,Iw Undocumented*/
 			{
-			if (rm >= 0xc0)
-				{
-				GetEArw;
-				TESTW(*earw, Fetchw(), LoadRw, SaveRw);
-				}
-			else
+			if (rm < 0xc0)
 				{
 				GetEAa;
 				TESTW(eaa, Fetchw(), Mem_Lodsw, Mem_Stosw);
+				}
+			else
+				{
+				GetEArw;
+				TESTW(*earw, Fetchw(), LoadRw, SaveRw);
 				}
 			break;
 			}
@@ -1433,10 +1532,6 @@
 	CASE_B(0xfb)												/* STI */
 		if (CPU_STI())
 			RUNEXCEPTION();
-#if CPU_PIC_CHECK
-		if (GETFLAG(IF) && PIC_IRQCheck)
-			goto decode_end;
-#endif
 		break;
 	CASE_B(0xfc)												/* CLD */
 		SETFLAGBIT(DF, false);
@@ -1460,8 +1555,8 @@
 			break;
 		case 0x07:										/* CallBack */
 			{
-			Bitu cb = Fetchw();
 			FillFlags();
+			Bitu cb = Fetchw();
 			SAVEIP;
 			return cb;
 			}
@@ -1505,25 +1600,23 @@
 			Bit16u newcs = Mem_Lodsw(eaa+2);
 			FillFlags();
 			CPU_CALL(false, newcs, newip, GETIP);
-#if CPU_TRAP_CHECK
 			if (GETFLAG(TF))
 				{	
 				cpudecoder = CPU_Core_Normal_Trap_Run;
 				return CBRET_NONE;
 				}
-#endif
 			continue;
 			}
 		case 0x04:										/* JMP Ev */	
-			if (rm >= 0xc0)
-				{
-				GetEArw;
-				reg_eip = *earw;
-				}
-			else
+			if (rm < 0xc0)
 				{
 				GetEAa;
 				reg_eip = Mem_Lodsw(eaa);
+				}
+			else
+				{
+				GetEArw;
+				reg_eip = *earw;
 				}
 			continue;
 		case 0x05:										/* JMP Ep */	
@@ -1535,25 +1628,23 @@
 			Bit16u newcs = Mem_Lodsw(eaa+2);
 			FillFlags();
 			CPU_JMP(false, newcs, newip);
-#if CPU_TRAP_CHECK
 			if (GETFLAG(TF))
-				{	
+				{
 				cpudecoder = CPU_Core_Normal_Trap_Run;
 				return CBRET_NONE;
 				}
-#endif
 			continue;
 			}
 		case 0x06:										/* PUSH Ev */
-			if (rm >= 0xc0)
-				{
-				GetEArw;
-				CPU_Push16(*earw);
-				}
-			else
+			if (rm < 0xc0)
 				{
 				GetEAa;
 				CPU_Push16(Mem_Lodsw(eaa));
+				}
+			else
+				{
+				GetEArw;
+				CPU_Push16(*earw);
 				}
 			break;
 		default:

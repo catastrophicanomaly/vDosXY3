@@ -267,17 +267,33 @@
 		}
 	CASE_0F_D(0xb6)												/* MOVZX Gd,Eb */
 		{
-			GetRMrd;															
-			if (rm >= 0xc0 ) {GetEArb;*rmrd=*earb;}
-			else {GetEAa;*rmrd=Mem_Lodsb(eaa);}
-			break;
+		GetRMrd;															
+		if (rm < 0xc0)
+			{
+			GetEAa;
+			*rmrd = Mem_Lodsb(eaa);
+			}
+		else
+			{
+			GetEArb;
+			*rmrd = *earb;
+			}
+		break;
 		}
 	CASE_0F_D(0xb7)												/* MOVXZ Gd,Ew */
 		{
-			GetRMrd;
-			if (rm >= 0xc0 ) {GetEArw;*rmrd=*earw;}
-			else {GetEAa;*rmrd=Mem_Lodsw(eaa);}
-			break;
+		GetRMrd;
+		if (rm >= 0xc0)
+			{
+			GetEArw;
+			*rmrd = *earw;
+			}
+		else
+			{
+			GetEAa;
+			*rmrd = Mem_Lodsw(eaa);
+			}
+		break;
 		}
 	CASE_0F_D(0xba)												/* GRP8 Ed,Ib */
 		{

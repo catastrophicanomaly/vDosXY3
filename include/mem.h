@@ -10,13 +10,17 @@ typedef Bit32u LinPt;
 typedef Bit8u * HostPt;
 typedef Bit32u RealPt;
 
-#define TOT_MEM_MB 64
-#define TOT_MEM_KB (TOT_MEM_MB*1024)
-#define TOT_MEM_BYTES (TOT_MEM_KB*1024)
 #define MEM_PAGESIZE (16*1024)														// Set to 16KB page size of EMS
-#define MEM_PAGES (TOT_MEM_BYTES/MEM_PAGESIZE)
+#define MEM_PAGES (4096)															// Number of pages for max 64MB
 
 extern HostPt MemBase;
+
+extern unsigned int TotMemBytes;
+extern unsigned int TotMemMB;
+extern unsigned int TotEXTMB;
+extern unsigned int TotXMSMB;
+extern unsigned int TotEMSMB;
+extern unsigned int EndConvMem;
 
 // These functions recognize the paged memory system
 Bit8u  Mem_Lodsb(LinPt pt);
@@ -29,6 +33,7 @@ void Mem_rStosb(LinPt address, Bit8u val, Bitu count);
 void Mem_rStos4b(LinPt address, Bit32u val, Bitu count);
 
 void clearTLB();
+
 
 inline void Mem_rStosw(LinPt addr, Bit16u val, Bitu count)
 	{
@@ -71,8 +76,6 @@ static void Mem_aWrites(PhysPt addr, const char* string, Bitu length)
 	}
 
 void Mem_rMovsb(LinPt dest, LinPt src, Bitu bSize);
-void Mem_rMovsw(LinPt dest, PhysPt src, Bitu wSize);
-void Mem_rMovsd(LinPt dest, PhysPt src, Bitu dSize);
 void Mem_CopyTo(LinPt pt, void const * const data, Bitu size);
 void Mem_CopyFrom(PhysPt pt, void * data, Bitu size);
 void Mem_StrnCopyFrom(char * data, PhysPt pt, Bitu size);

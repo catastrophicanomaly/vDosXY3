@@ -13,7 +13,7 @@
 #pragma pack(1)
 #endif
 struct EXE_Header {
-	Bit16u signature;					// EXE Signature MZ or ZM
+	Bit16u signature;					// EXE Signature MZ
 	Bit16u extrabytes;					// Bytes on the last page
 	Bit16u pages;						// Pages in file
 	Bit16u relocations;					// Relocations in file
@@ -27,13 +27,17 @@ struct EXE_Header {
 	Bit16u initCS;
 	Bit16u reloctable;					// 40h or greater for new-format (NE, LE, LX, W3, PE, etc.) executable
 	Bit16u overlay;
+	Bit16u reserved1[4];
+	Bit16u oem_id;
+	Bit16u oem_info;
+	Bit16u reserved2[10];
+	Bit32u e_lfanew;
 };
 #ifdef _MSC_VER
 #pragma pack()
 #endif
 
 #define MAGIC1 0x5a4d
-#define MAGIC2 0x4d5a
 #define MAXENV 512
 #define LOADNGO 0
 #define LOAD    1
@@ -195,6 +199,7 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 	Bitu headersize = 0, imagesize = 0;
 	DOS_ParamBlock block(block_pt);
 	bool isCom = false;
+	bool isComSpec = false;
 
 	block.LoadData();
 
@@ -203,99 +208,118 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 		DOS_SetError(DOSERR_FORMAT_INVALID);
 		return false;
 		}
-	if (!DOS_OpenFile(name, OPEN_READ, &fhandle))
-		return false;
-	fLen = sizeof(EXE_Header);														// Check for EXE or COM File
-	if (!DOS_ReadFile(fhandle, (Bit8u *)&head, &fLen))
+	if (!stricmp("C:\\COMMAND.COM", name))
+		isComSpec = isCom = true;
+	else
 		{
-		DOS_SetError(DOSERR_ACCESS_DENIED);
-		DOS_CloseFile(fhandle);
-		return false;
-		}
-	if (fLen < sizeof(EXE_Header))
-		{
-		if (fLen == 0)																// Prevent executing zero byte files
+		if (!DOS_OpenFile(name, OPEN_READ, &fhandle))
+			return false;
+		fLen = sizeof(EXE_Header);													// Check for EXE or COM File
+		if (!DOS_ReadFile(fhandle, (Bit8u *)&head, &fLen))
 			{
 			DOS_SetError(DOSERR_ACCESS_DENIED);
 			DOS_CloseFile(fhandle);
 			return false;
 			}
-		isCom = true;																// If less than header size: .com file
-		}
-	else
-		{
-		if ((head.signature != MAGIC1) && (head.signature != MAGIC2))
-			isCom = true;
+		if (fLen < sizeof(EXE_Header))
+			{
+			if (fLen == 0)															// Prevent executing zero byte files
+				{
+				DOS_SetError(DOSERR_ACCESS_DENIED);
+				DOS_CloseFile(fhandle);
+				return false;
+				}
+			isCom = true;															// If less than header size: .com file
+			}
 		else
 			{
-//			if (head.reloctable == 0x40)											// Non-Dos program (docu mentions > 40h, but PKLITE/Dos has 54)
-			if (head.reloctable >= 0x40 && head.initIP == 0 && head.initCS == 0)	// Non-Dos program
-				{																	// Init.. always 0 with Windows? Q&D
-				DOS_CloseFile(fhandle);
-				if (Mem_Lodsw(block_pt))											// First word of epb_block should be 0
+			if (head.signature != MAGIC1)
+				isCom = true;
+			else																	// Test if WIndows program
+				{
+				fPos = 0;
+				DOS_SeekFile(fhandle, &fPos, DOS_SEEK_END);
+				if (head.e_lfanew < fPos-2)
 					{
+					fPos = head.e_lfanew;
+					DOS_SeekFile(fhandle, &fPos, DOS_SEEK_SET);
+					fLen = 2;														// Check for PE signature
+					Bit16u PEsign;
+					DOS_ReadFile(fhandle, (Bit8u *)&PEsign, &fLen);
+					if (fLen == 2 && fPos == head.e_lfanew && PEsign == 0x4550)
+						{															// Init.. always 0 with Windows? Q&D
+						int spawnMode = P_WAIT;										// Standard wait
+						fPos += 92;													// Offset to Subsystem identifier
+						DOS_SeekFile(fhandle, &fPos, DOS_SEEK_SET);
+						DOS_ReadFile(fhandle, (Bit8u *)&PEsign, &fLen);
+						if (fLen == 2 && fPos == head.e_lfanew+92 && PEsign == 2)
+							spawnMode = P_NOWAIT;									// If GUI program
+						DOS_CloseFile(fhandle);
+						if (Mem_Lodsw(block_pt))									// First word of epb_block should be 0
+							{
+							DOS_SetError(DOSERR_FORMAT_INVALID);
+							return false;
+							}
+						char comline[256];
+						char winDirCur[512];										// Setting Windows directory to DOS drive+current directory
+						char winDirNew[512];										// and calling the program
+						char winName[256];
+						Bit8u drive;
+						DOS_MakeName(name, winDirNew, &drive);						// Mainly to get the drive and pathname w/o it
+						if (GetCurrentDirectory(512, winDirCur))
+							{
+							strcpy(winName, Drives[drive]->GetWinDir());
+							strcat(winName, winDirNew);
+							strcpy(winDirNew, Drives[DOS_GetDefaultDrive()]->GetWinDir());	// Windows directory of DOS drive
+							strcat(winDirNew, Drives[DOS_GetDefaultDrive()]->curdir);	// Append DOS current directory
+							if (SetCurrentDirectory(winDirNew))
+								{
+								PhysPt comPtr = SegOff2Ptr(Mem_Lodsw(block_pt+4), Mem_Lodsw(block_pt+2));
+								memset(comline, 0, 256);
+								Mem_CopyFrom(comPtr+1, comline, Mem_Lodsb(comPtr));	// Get commandline, directories are supposed Windows at this moment!
+								int ret = _spawnl(spawnMode, winName, winName, comline, NULL);
+								SetCurrentDirectory(winDirCur);
+								if (spawnMode == P_NOWAIT)
+									ret = 0;										// P_NOWAIT returns process handle
+								DOS_SetError(ret);
+								return ret == 0;
+								}
+							}
+						DOS_SetError(DOSERR_FILE_NOT_FOUND);						// just pick one
+						return false;
+						}
+					}
+				head.pages &= 0x07ff;
+				headersize = head.headersize*16;
+				imagesize = head.pages*512-headersize; 
+				if (imagesize+headersize < 512)
+					imagesize = 512-headersize;
+				}
+			}
+		}
+	if (flags != OVERLAY)
+		{
+		Bit16u minsize = 18;
+		Bit16u maxsize = 0xffff;
+		if (!isComSpec)
+			if (isCom)
+				{
+				fPos = 0;															// Reduce minimum of needed memory size to filesize
+				DOS_SeekFile(fhandle, &fPos, DOS_SEEK_END);
+				if (fPos > 0xff00)													// Maximum file size is 64KB - 256 bytes
+					{
+					DOS_CloseFile(fhandle);
 					DOS_SetError(DOSERR_FORMAT_INVALID);
 					return false;
 					}
-				char comline[256];
-				char winDirCur[512];												// Setting Windows directory to DOS drive+current directory
-				char winDirNew[512];												// and calling the program
-				char winName[256];
-				Bit8u drive;
-
-				DOS_MakeName(name, winDirNew, &drive);								// Mainly to get the drive and pathname w/o it
-				if (drive != 25 && GetCurrentDirectory(512, winDirCur))				// Can't have DOS Z: as Windows current directory
-					{
-					strcpy(winName, Drives[drive]->GetInfo());
-					strcat(winName, winDirNew);
-					strcpy(winDirNew, Drives[DOS_GetDefaultDrive()]->GetInfo());	// Windows directory of DOS drive
-					strcat(winDirNew, Drives[DOS_GetDefaultDrive()]->curdir);		// Append DOS current directory
-					if (SetCurrentDirectory(winDirNew))
-						{
-						PhysPt comPtr = SegOff2Ptr(Mem_Lodsw(block_pt+4), Mem_Lodsw(block_pt+2));
-						memset(comline, 0, 256);
-						Mem_CopyFrom(comPtr+1, comline, Mem_Lodsb(comPtr));			// Get commandline, directories are supposed Windows at this moment!
-						if (_spawnl(P_NOWAIT, winName, winName, comline, NULL) != -1)
-							{
-							SetCurrentDirectory(winDirCur);
-							return true;
-							}
-						SetCurrentDirectory(winDirCur);
-						}
-					}
-				DOS_SetError(DOSERR_FILE_NOT_FOUND);								// jsut pick one
-				return false;
+				minsize = (Bit16u)(fPos>>4)+16;
 				}
-			head.pages &= 0x07ff;
-			headersize = head.headersize*16;
-			imagesize = head.pages*512-headersize; 
-			if (imagesize+headersize < 512)
-				imagesize = 512-headersize;
-			}
-		}
-
-	if (flags != OVERLAY)
-		{
-		Bit16u minsize;
-		Bit16u maxsize = 0xffff;
-		if (isCom)
-			{
-			fPos = 0;																// Reduce minimum of needed memory size to filesize
-			DOS_SeekFile(fhandle, &fPos, DOS_SEEK_END);
-			if (fPos > 0xff00)														// Maximum file size is 64KB - 256 bytes
+			else
 				{
-				DOS_CloseFile(fhandle);
-				DOS_SetError(DOSERR_FORMAT_INVALID);
-				return false;
+				minsize = long2para(imagesize+(head.minmemory<<4)+256);				// Exe size calculated from header
+				if (head.maxmemory != 0)
+					maxsize = long2para(imagesize+(head.maxmemory<<4)+256);
 				}
-			minsize = (Bit16u)(fPos>>4) + 256;
-			}
-		else
-			{
-			minsize = long2para(imagesize+(head.minmemory<<4)+256);					// Exe size calculated from header
-			if (head.maxmemory != 0)
-				maxsize = long2para(imagesize+(head.maxmemory<<4)+256);
-			}
 		Bit8u UMB_flag, old_memstrat;
 		Bit16u UMB_total, UMB_largest, UMB_count;
 		Bit16u maxfree = 0xffff;
@@ -317,7 +341,8 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 		envseg = block.exec.envseg;
 		if (!MakeEnv(name, &envseg))												// Create an environment block
 			{
-			DOS_CloseFile(fhandle);
+			if (!isComSpec)
+				DOS_CloseFile(fhandle);
 			return false;
 			}
 		if (!LoadHigh)
@@ -325,7 +350,8 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 			DOS_AllocateMemory(&pspseg, &maxfree);
 			if (maxfree < minsize)
 				{
-				DOS_CloseFile(fhandle);
+				if (!isComSpec)
+					DOS_CloseFile(fhandle);
 				DOS_FreeMemory(envseg);
 				DOS_SetError(DOSERR_INSUFFICIENT_MEMORY);
 				return false;
@@ -350,14 +376,17 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 		if (isCom)																	// Can't overlay a .COM
 			{
 			DOS_SetError(DOSERR_FORMAT_INVALID);
-			DOS_CloseFile(fhandle);
+			if (!isComSpec)
+				DOS_CloseFile(fhandle);
 			return false;
 			}
 		loadseg = block.overlay.loadseg;
 		}
 	Bit8u* loadaddress = MemBase+(loadseg<<4);										// Load the executable
 
-	if (isCom)																		// COM Load 64k - 256 bytes max
+	if (isComSpec)
+		PROGRAMS_ComSpecData(loadaddress);
+	else if (isCom)																	// COM Load 64k - 256 bytes max
 		{
 		fPos = 0;
 		DOS_SeekFile(fhandle, &fPos, DOS_SEEK_SET);	
@@ -394,7 +423,8 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 			delete[] relocpts;
 			}
 		}
-	DOS_CloseFile(fhandle);
+	if (!isComSpec)
+		DOS_CloseFile(fhandle);
 
 	if (flags == OVERLAY)
 		return true;																// Everything done for overlays
@@ -410,8 +440,6 @@ bool DOS_Execute(char * name, PhysPt block_pt, Bit8u flags)
 		}
 	else
 		{
-//		if (head.initSP < 4)
-//			E_Exit("Initial SP value too low");
 		csip = SegOff2dWord(loadseg+head.initCS, head.initIP);
 		sssp = SegOff2dWord(loadseg+head.initSS, head.initSP);
 		}

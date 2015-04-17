@@ -17,11 +17,11 @@ static Bitu INT2F_Handler(void)
 		idleCount = idleTrigger;
 		break;
 	case 0x4300:																	// XMS installed check
-		if (!EMS_present)
+		if (TotXMSMB)
 			reg_al = 0x80;
 		break;
 	case 0x4310:																	// XMS handler seg:offset
-		if (!EMS_present)
+		if (TotXMSMB)
 			{
 			SegSet16(es, RealSeg(xms_callback));
 			reg_bx = RealOff(xms_callback);
@@ -53,6 +53,6 @@ static Bitu INT2A_Handler(void)
 
 void DOS_SetupMisc(void)
 	{
-	CALLBACK_Install(0x2f, &INT2F_Handler, CB_IRET);								// DOS Int 2f - Multiplex
+	CALLBACK_Install(0x2f, &INT2F_Handler, CB_IRET_STI);								// DOS Int 2f - Multiplex
 	CALLBACK_Install(0x2a, &INT2A_Handler, CB_IRET);								// DOS Int 2a - Network
 	}

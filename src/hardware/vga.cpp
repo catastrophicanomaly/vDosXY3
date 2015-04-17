@@ -1,6 +1,5 @@
 #include "vDos.h"
 #include "video.h"
-#include "pic.h"
 #include "vga.h"
 
 VGA_Type vga;
@@ -29,7 +28,6 @@ void VGA_DetermineMode(void)
 
 void VGA_Init()
 	{
-	vga.draw.resizing = false;
 	vga.mode = M_ERROR;																// For first init
 	vga.vmemsize = 256*1024;														// 256kB VGA memory
 	VGA_SetupMemory();																// Memory is allocated here

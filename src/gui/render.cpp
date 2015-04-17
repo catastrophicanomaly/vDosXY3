@@ -88,8 +88,3 @@ void RENDER_SetSize(Bitu width, Bitu height)
 	render.cache.nextInvalid = true;												// Signal the next frame to first reinit the cache
 	render.active = true;
 	}
-
-void RENDER_Init()
-	{
-	}
-

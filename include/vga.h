@@ -43,10 +43,8 @@ typedef struct {
 } VGA_Config;
 
 typedef struct {
-	bool resizing;
 	Bitu width;
 	Bitu height;
-	Bit8u font[64*1024];
 	bool vertRetrace;
 	struct {
 		Bitu address;
@@ -131,7 +129,6 @@ typedef struct {
 	RGBEntry rgb[0x100];
 	Bit16u xlat16[256];
 	Bit8u hidac_counter;
-	Bit8u reg02;
 } VGA_Dac;
 
 typedef union {
@@ -157,11 +154,11 @@ typedef struct {
 	Bit32u vmemsize;
 } VGA_Type;
 
+void VGA_VerticalTimer(void);
 void VGA_SetMode(VGAModes mode);
 void VGA_DetermineMode(void);
 void VGA_SetupHandlers(void);
 void VGA_StartResize(void);
-void VGA_ForceUpdate(void);
 void VGA_ResetVertTimer(bool delay);
 
 // Some DAC/Attribute functions

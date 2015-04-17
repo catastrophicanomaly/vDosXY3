@@ -1,17 +1,17 @@
 #include <stdlib.h>
 #include "vDos.h"
 #include "video.h"
-#include "pic.h"
 #include "cpu.h"
 #include "callback.h"
-#include "timer.h"
 #include "parport.h"
 #include "support.h"
+#include "bios.h"
 
 #include "mouse.h"
 #include "vga.h"
+#include "paging.h"
 
-char vDosVersion[] = "2014.10.19";
+char vDosVersion[] = "2015.04.10";
 
 // The whole load of startups for all the subfunctions
 void GUI_StartUp();
@@ -20,7 +20,6 @@ void PAGING_Init();
 void IO_Init();
 void CALLBACK_Init();
 void PROGRAMS_Init();
-void RENDER_Init();
 void VGA_Init();
 void DOS_Init();
 void CPU_Init();
@@ -35,7 +34,6 @@ void PARALLEL_Init();
 // Dos Internal mostly
 void XMS_Init();
 void EMS_Init();
-void AUTOEXEC_Init();
 void SHELL_Init();
 void INT10_Init();
 
@@ -50,49 +48,63 @@ int wsVersion;																		// For now just 0 (no WordStar) or 1
 int wsBackGround;																	// BackGround text color WordStar
 Bit8u initialvMode = 3;																// Initial videomode, 3 = color, 7 = Hercules for as far it works
 int codepage = 0;																	// Current code page, defaults to Windows OEM
+bool printTimeout;																	// Should the spoolfile timeout?
+int eurAscii = -1;																	// ASCII value to use for the EUro symbol, standard none
 
-
-Bit8u tempBuff1K [1024];	
-Bit8u tempBuff2K [2*1024];	
-Bit8u tempBuff4K [4*1024];
-Bit8u tempBuff32K [32*1024];
 Bitu lastOpcode;
 
-bool EMS_present = false;
-
+Bit32s CPU_Cycles =	0;
 Bit32s CPU_CycleMax = CPU_CycleHigh;
+
+static Bit32u prevWinRefresh;
+bool ISR;
+static bool intPending = false;
 
 void RunPC(void)
 	{
 	while (1)
 		{
-		if (PIC_RunQueue())
+		while (CPU_Cycles > 0)
 			{
-			if (mouse_event_type && GETFLAG(IF))
-				CPU_HW_Interrupt(0x74);
+			if (BIOS_HostTimeSync() && !ISR)
+				intPending = true;													// New timer tick
+			if (GETFLAG(IF))														// (hardware) Interrupts handled
+				if (intPending)
+					{
+					intPending = false;
+					if ((Mem_Lodsb(4*8+3)|Mem_Lodsb(4*0x1c+3)) != 0xf0)				// And Int 8 or 1C replaced
+						{
+						ISR = true;
+						CPU_HW_Interrupt(8);										// Setup executing Int 8 (IRQ0)
+						}
+					}
+				else if (mouse_event_type)
+					CPU_HW_Interrupt(0x74);											// Setup executing Int 74 (Mouse)
 			Bits ret = (*cpudecoder)();
 			if (ret < 0)
 				return;
 			if (ret > 0 && (*CallBack_Handlers[ret])())
 				return;
 			}
-		else
+		GFX_Events();
+		Bit32u mSecsNew = GetTickCount();
+		if (mSecsNew >= prevWinRefresh+40)											// 25 refreshes per second
 			{
-			GFX_Events();
-			TIMER_AddTick();
-			Bit32u mSecsNew = GetTickCount();
-			if (mSecsNew <= mSecsLast+18)											// To be real save???
-				{
-				LPT_CheckTimeOuts(mSecsNew);
-				Sleep(idleCount >= idleTrigger ? 2: 0);								// If idleTrigger or more repeated idle keyboard requests or int 28h called, sleep fixed (CPU usage drops down)
-				if (idleCount > idleTrigger && CPU_CycleMax > CPU_CycleLow)
-					CPU_CycleMax -= 100;											// Decrease cycles
-				else if (idleCount <= idleTrigger  && CPU_CycleMax < CPU_CycleHigh)
-					CPU_CycleMax += 1000;											// Fire up again
-				}
-			mSecsLast = mSecsNew;
-			idleCount = 0;
+			prevWinRefresh = mSecsNew;
+			VGA_VerticalTimer();
 			}
+		if (mSecsNew <= mSecsLast+55)												// To be real save???
+			{
+			LPT_CheckTimeOuts(mSecsNew);
+			Sleep(idleCount >= idleTrigger ? 2: 0);									// If idleTrigger or more repeated idle keyboard requests or int 28h called, sleep fixed (CPU usage drops down)
+			if (idleCount > idleTrigger && CPU_CycleMax > CPU_CycleLow)
+				CPU_CycleMax -= 100;												// Decrease cycles
+			else if (idleCount <= idleTrigger  && CPU_CycleMax < CPU_CycleHigh)
+				CPU_CycleMax += 1000;												// Fire up again
+			}
+		mSecsLast = mSecsNew;
+		idleCount = 0;
+		CPU_Cycles = CPU_CycleMax;
 		}
 	}
 
@@ -113,6 +125,7 @@ static struct
 {
 char name[LENNAME+1];
 Vtype type;
+bool set;
 union {bool _bool; int _int; char * _string;}value;
 } ConfSetting[MAXNAMES];
 
@@ -177,6 +190,9 @@ static char* ConfSetValue(const char* name, char* value)
 	int entry = findEntry(name);
 	if (entry == -1)
 		return "No valid config option\n";
+	if (ConfSetting[entry].set)
+		return "Config option already set\n";
+	ConfSetting[entry].set = true;
 	switch (ConfSetting[entry].type)
 		{
 	case V_BOOL:
@@ -254,12 +270,12 @@ void ConfAddError(char* desc, char* errLine)
 void ParseConfigFile()
 	{
 	char * parseRes;
-	char *lineIn = (char *)tempBuff4K;
+	char lineIn[1024];
 	FILE * cFile;
 	errorMess[0] = 0;
 	if (!(cFile = fopen("config.txt", "r")))
 		return;
-	while (fgets(lineIn, 4096, cFile))
+	while (fgets(lineIn, 1023, cFile))
 		{
 		char *line = lrTrim(lineIn);
 		if (strlen(line) && !(!strnicmp(line, "rem", 3) && (line[3] == 0 || line[3] == 32 || line[3] == 9)))	// Filter out rem ...
@@ -269,13 +285,7 @@ void ParseConfigFile()
 	fclose(cFile);
 	}
 
-static void ConfShowErrors()
-	{
-	if (errorMess[0])
-		MessageBox(NULL, errorMess+1, "vDos: CONFIG.TXT has unresolved items", MB_OK|MB_ICONWARNING);
-	}
-
-void vDOS_Init(void)
+void vDos_Init(void)
 	{
 	hideWinTill = GetTickCount()+2500;												// Auto hidden till first keyboard check, parachute at 2.5 secs
 
@@ -284,14 +294,16 @@ void vDOS_Init(void)
 	ConfAddInt("scale", 0);
 	ConfAddString("window", "");
 	ConfAddBool("low", false);
-	ConfAddBool("ems", false);
+	ConfAddString("xmem", "");
 	ConfAddString("colors", "");
 	ConfAddBool("mouse", false);
 	ConfAddInt("lins", 25);
 	ConfAddInt("cols", 80);
 	ConfAddBool("frame", false);
+	ConfAddBool("timeout", true);
 	ConfAddString("font", "");
 	ConfAddString("wp", "");
+	ConfAddInt("euro", -1);
 	ParseConfigFile();
 
 	GUI_StartUp();
@@ -304,7 +316,6 @@ void vDOS_Init(void)
 	TIMER_Init();
 //	CMOS_Init();
 	VGA_Init();
-	RENDER_Init();
 	CPU_Init();
 	KEYBOARD_Init();
 	BIOS_Init();
@@ -312,11 +323,11 @@ void vDOS_Init(void)
 	MOUSE_Init();
 	SERIAL_Init();
 	PARALLEL_Init();
-	// All the DOS related stuff
+	printTimeout = ConfGetBool("timeout");
 	DOS_Init();
 	XMS_Init();
 	EMS_Init();
-	ConfShowErrors();
-	AUTOEXEC_Init();
+	if (errorMess[0])
+		MessageBox(NULL, errorMess+1, "vDos: CONFIG.TXT has unresolved items", MB_OK|MB_ICONWARNING);
 	SHELL_Init();																	// Start up main machine
 	}

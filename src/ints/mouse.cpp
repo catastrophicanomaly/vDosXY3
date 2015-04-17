@@ -4,7 +4,6 @@
 #include "regs.h"
 #include "cpu.h"
 #include "mouse.h"
-#include "pic.h"
 #include "inout.h"
 #include "int10.h"
 #include "bios.h"
@@ -41,13 +40,12 @@ Bit8u	mouse_event_buttons;
 
 void Mouse_AddEvent(Bit8u type)
 	{
-	if (!(mouse.sub_mask&type))														// No sense to go into the Int(IRQ) trouble if not handled by replaced mouse driver
+	if (!(mouse.sub_mask&type))														// No sense to go into the Int trouble if not handled by replaced mouse driver
 		return;																		// NB, sub_mask = 0 with the internal driver
 	if (mouse_event_type && type == 1)												// If mouse move and some mouse operation pending, drop
 		return;
 	mouse_event_type = type;
 	mouse_event_buttons = mouse.buttons;
-//	PIC_ActivateIRQ(MOUSE_IRQ);														// Int74 periodic called in vDos.cpp when needed (mouse_event_type)
 	}
 
 void Mouse_CursorMoved(Bit16u x, Bit16u y, Bit16u scale_x, Bit16u scale_y)
@@ -227,7 +225,7 @@ static Bitu INT74_Handler(void)
 void MOUSE_Init()
 	{
 	Bitu cb = CALLBACK_Allocate();													// Callback for mouse interrupt 33
-	CALLBACK_Setup(cb, &INT33_Handler, CB_IRET);
-	RealSetVec(0x33, CALLBACK_RealPointer(cb)+(usesMouse ? 0 : 4));					// Programs should check for 0 (or IRET at location), 0 as Int address stalls some
+	CALLBACK_Setup(cb, &INT33_Handler, CB_IRET_STI);
+	RealSetVec(0x33, CALLBACK_RealPointer(cb)+(usesMouse ? 0 : 5));					// Programs should check for 0 (or IRET at location), 0 as Int address stalls some
 	CALLBACK_Install(0x74, &INT74_Handler, CB_IRQ12);								// Callback for ps2 irq - Int 74
 	}

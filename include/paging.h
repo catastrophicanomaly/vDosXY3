@@ -10,10 +10,6 @@
 
 #define PFLAG_READABLE		0x1
 #define PFLAG_WRITEABLE		0x2
-#define PFLAG_HASROM		0x4
-#define PFLAG_HASCODE		0x8				// Page contains dynamic code
-#define PFLAG_NOCODE		0x10			// No dynamic code can be generated here
-#define PFLAG_INIT			0x20			// No dynamic code can be generated here
 
 class PageHandler
 	{

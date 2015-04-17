@@ -1,7 +1,7 @@
 #ifndef VDOS_RENDER_H
 #define VDOS_RENDER_H
 
-#include "sdl_ttf.h"
+#include "ttf.h"
 
 // reduced to save some memory
 #define RENDER_MAXWIDTH		800 
@@ -33,9 +33,11 @@ typedef struct {
 	bool active;
 } Render_t;
 
+#define STYLE_STRIKEOUT	1;
+#define STYLE_ITALIC	2;
+#define STYLE_UNDERLINE	4;
+
 typedef struct {
-	char	fontName[32];
-	HFONT	hFontNormal;
 	TTF_Font *SDL_font;
 	bool	vDos;								// is vDos.ttf loaded, pointsizes are preferred to be even to look really nice
 	int		pointsize;
