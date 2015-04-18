@@ -63,12 +63,15 @@ Bit32s CPU_Cycles =	0;
 Bit32s CPU_CycleMax = CPU_CycleHigh;
 
 static Bit32u prevWinRefresh;
-//bool ISR;
+#ifndef WITHIRQ1
+bool ISR;
+#else
 Bit8u ISR;
 bool keyb_req = false;
-static bool intPending = false;
 static bool kbPending = false;
-static Bit8u isr9count = 0;
+#endif
+
+static bool intPending = false;
 
 void RunPC(void)
 	{
@@ -79,10 +82,14 @@ void RunPC(void)
 			if (BIOS_HostTimeSync() && !ISR)
 			{ 
 				intPending = true;													// New timer tick
+#ifdef WITHIRQ1
 				kbPending = false;
+#endif
 			}
-			else if (!intPending && keyb_req && !ISR)
+#ifdef WITHIRQ1
+			else if (useIrq1 && !intPending && keyb_req && !ISR)
 				kbPending=true;
+#endif
 			if (GETFLAG(IF))														// (hardware) Interrupts handled
 				if (intPending)
 					{
@@ -93,15 +100,15 @@ void RunPC(void)
 						CPU_HW_Interrupt(8);										// Setup executing Int 8 (IRQ0)
 						}
 					}
+#ifdef WITHIRQ1
 				else if (kbPending)
 					{
 						kbPending = false;
 						keyb_req = false;
 						ISR = 2;
-						isr9count++;
-						printf("%d\n", isr9count);
 						CPU_HW_Interrupt(9);
 					}
+#endif
 				else if (mouse_event_type)
 					CPU_HW_Interrupt(0x74);											// Setup executing Int 74 (Mouse)
 			Bits ret = (*cpudecoder)();
@@ -308,8 +315,7 @@ void ParseConfigFile()
 		}
 	fclose(cFile);
 
-	if (*(ConfGetString("font")) == '\0' && !ConfGetBool("Euro"))
-		ConfAddError("Option EURO=OFF does not work with the built-in font, please use an external font like consola", "");
+	
 	}
 
 
@@ -347,6 +353,7 @@ void vDos_LoadConfig(void)
 	ConfAddString("font", "");
 	ConfAddString("wp", "");
 	ConfAddBool("blinkc", false);
+	ConfAddInt("euro", -1);
 	ParseConfigFile();
 	}
 

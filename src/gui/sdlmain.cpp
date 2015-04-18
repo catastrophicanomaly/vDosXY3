@@ -137,37 +137,32 @@ int GFX_SetCodePage(int cp)
 		cTest[i] = i;
 	Bit16u wcTest[256];
 
-	// emendelson new eurofont routine
 	
 	if (MultiByteToWideChar(cp, 0, (char*)cTest, 256, NULL, 0) == 256)
 		{
 		int notMapped = 0;															// Number of characters not defined in font
 		MultiByteToWideChar(cp, 0, (char*)cTest, 256, (LPWSTR)wcTest, 256);
 		Bit16u unimap;	
-		int cOffset;
-		if (ConfGetBool("euro"))
-			cOffset = (TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac) ? 1 : 0);
-		else
-			//Do not replace cedilla with euro if config.txt contains "euro=off
-			cOffset = 0;
-		for (int c = 128+ cOffset; c < 256; c++)	// Check all characters above 128 (128 = always Euro symbol if defined in font)
+	
+		for (int c = 128; c < 256; c++)	// Check all characters above 128 (128 = always Euro symbol if defined in font)
+		{
+			if (wcTest[c] != 0x20ac)												// To be consistent, no Euro substitution
 			{
-			unimap = wcTest[c];
-			if (!fontBoxed || c < 176 || c > 223)
+				unimap = wcTest[c];
+				if (!fontBoxed || c < 176 || c > 223)
 				{
-				if (!TTF_GlyphIsProvided(ttf.SDL_font, unimap))
-					notMapped++;
-				else
-					cpMap[c] = unimap;
+					if (!TTF_GlyphIsProvided(ttf.SDL_font, unimap))
+						notMapped++;
+					else
+						cpMap[c] = unimap;
 				}
 			}
-		//if (eurAscii != -1 && TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac))
-		//	cpMap[eurAscii] = 0x20ac;
+		}
+		if (eurAscii != -1 && TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac))
+			cpMap[eurAscii] = 0x20ac;
 		return notMapped;
 		}
 	
-	// end emendelson new eurofont routine
-
 	return -1;																		// Code page not set
 	}
 
@@ -785,9 +780,9 @@ void GUI_StartUp()
 	blinkCursor = ConfGetBool("blinkc");
 	winFramed = ConfGetBool("frame");
 	sdl.scale = ConfGetInt("scale");
-	//eurAscii = ConfGetInt("euro");
-	//if (eurAscii != -1 && (eurAscii < 33 || eurAscii > 255))
-	//	E_Exit("Config.txt: Euro ASCII value has to be between 33 and 255");
+	eurAscii = ConfGetInt("euro");
+	if (eurAscii != -1 && (eurAscii < 33 || eurAscii > 255))
+		E_Exit("Config.txt: Euro ASCII value has to be between 33 and 255");
 	if (sdl.scale < 0 || sdl.scale > 9)
 		E_Exit("Config.txt: scale factor has to be between 1 and 9");
 	char *wpStr = ConfGetString("WP");

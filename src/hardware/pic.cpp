@@ -8,8 +8,10 @@ static void write_command(Bitu port, Bitu val, Bitu iolen)
 	{
 		if (port == 0x20 && val == 0x20)
 		{
-			if (ISR & 2)
+#ifdef WITHIRQ1
+			if (useIrq1 &&  (ISR & 2))
 				KEYBOARD_NextFromBuf();
+#endif
 			ISR = 0;
 
 		}
