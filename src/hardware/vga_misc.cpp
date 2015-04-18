@@ -1,6 +1,5 @@
 #include "vDos.h"
 #include "inout.h"
-#include "pic.h"
 #include "vga.h"
 #include <math.h>
 
@@ -17,10 +16,7 @@ Bitu vga_read_p3da(Bitu port, Bitu iolen)											// bit 0 = horizontal or ver
 	hvBlank ^= 1;
 	Bit8u retval = hvBlank;
 	if (vga.draw.vertRetrace)														// Set by VGA_VerticalTimer()
-		{
 		retval |= 8;
-//		vga.draw.vertRetrace = false;
-		}
 	return retval;
 	}
 

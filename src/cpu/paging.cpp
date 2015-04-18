@@ -3,7 +3,6 @@
 #include "mem.h"
 #include "paging.h"
 #include "regs.h"
-#include "lazyflags.h"
 
 PagingBlock paging;
 
@@ -50,8 +49,6 @@ HostPt PageHandler::GetHostPt(PhysPt addr)
 
 void PAGING_SetDirBase(Bitu cr3)
 	{
-//	E_Exit("Memory paging in protected mode is not supported");
-
 	if (cr3 != 0 && paging.cr3 != cr3)												// Shoot me, Phar Lap is frequently switching between 0 and the previous set value
 		{
 		if (cr3&0xfff)
@@ -63,8 +60,6 @@ void PAGING_SetDirBase(Bitu cr3)
 
 void PAGING_Enable(bool enabled)
 	{
-//	if (enabled)
-//		E_Exit("Memory paging in protected mode is not supported");
 	paging.enabled = enabled;
 	}
 

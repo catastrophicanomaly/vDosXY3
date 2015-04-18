@@ -14,6 +14,7 @@ static Bitu INT10_Handler(void)
 		{
 	case 0x00:																				// Set videomode
 		INT10_SetVideoMode(reg_al);
+		reg_al = Mem_Lodsb(BIOSMEM_SEG, BIOSMEM_CURRENT_MODE);
 		break;
 	case 0x01:																				// Set textmode cursor shape
 		INT10_SetCursorShape(reg_ch, reg_cl);
@@ -263,54 +264,8 @@ graphics_chars:
 	case 0x1A:																				// Display Combination
 		if (reg_al == 0)																	// Get DCC
 			{
-			RealPt vsavept = Mem_Lodsd(BIOSMEM_SEG, BIOSMEM_VS_POINTER);					// Walk the tables...
-			RealPt svstable = Mem_Lodsd(RealSeg(vsavept), RealOff(vsavept)+0x10);
-			if (svstable)
-				{
-				RealPt dcctable = Mem_Lodsd(RealSeg(svstable), RealOff(svstable)+0x02);
-				Bit8u entries = Mem_Lodsb(RealSeg(dcctable), RealOff(dcctable)+0x00);
-				Bit8u idx = Mem_Lodsb(BIOSMEM_SEG, BIOSMEM_DCC_INDEX);
-				if (idx < entries)															// Check if index within range
-					{
-					Bit16u dccentry = Mem_Lodsw(RealSeg(dcctable), RealOff(dcctable)+0x04+idx*2);
-					if ((dccentry&0xff) == 0)
-						reg_bx = dccentry>>8;
-					else
-						reg_bx = dccentry;
-					}
-				else
-					reg_bx = 0xffff;
-				}
-			else
-				reg_bx = 0xffff;
+			reg_bx = 8;																		// Only active  display code (VGA)
 			reg_ax = 0x1a;																	// High part destroyed or zeroed depending on BIOS
-			}
-		else if (reg_al == 1)																// Set dcc
-			{
-			Bit8u newidx = 0xff;
-			RealPt vsavept=Mem_Lodsd(BIOSMEM_SEG, BIOSMEM_VS_POINTER);						// Walk the tables...
-			RealPt svstable = Mem_Lodsd(RealSeg(vsavept), RealOff(vsavept)+0x10);
-			if (svstable)
-				{
-				RealPt dcctable = Mem_Lodsd(RealSeg(svstable), RealOff(svstable)+0x02);
-				Bit8u entries = Mem_Lodsb(RealSeg(dcctable), RealOff(dcctable)+0x00);
-				if (entries)
-					{
-					Bitu ct;
-					Bit16u swpidx = reg_bh|(reg_bl<<8);
-					for (ct = 0; ct < entries; ct++)										// search the DDC index in the DCC table
-						{
-						Bit16u dccentry = Mem_Lodsw(RealSeg(dcctable), RealOff(dcctable)+0x04+ct*2);
-						if ((dccentry == reg_bx) || (dccentry == swpidx))
-							{
-							newidx = (Bit8u)ct;
-							break;
-							}
-						}
-					}
-				}
-			Mem_Stosb(BIOSMEM_SEG,BIOSMEM_DCC_INDEX, newidx);
-			reg_ax = 0x1A;																	// High part destroyed or zeroed depending on BIOS
 			}
 		break;
 	default:
@@ -338,7 +293,7 @@ static void INT10_InitVGA(void)
 void INT10_Init()
 	{
 	INT10_InitVGA();
-	CALLBACK_Install(0x10, &INT10_Handler, CB_IRET);										// Int 10 video
+	CALLBACK_Install(0x10, &INT10_Handler, CB_IRET_STI);									// Int 10 video
 	INT10_SetupRomMemory();																	// Init the 0x40 segment and init the datastructures in the the video rom area
 	INT10_Seg40Init();
 	INT10_SetVideoMode(initialvMode);

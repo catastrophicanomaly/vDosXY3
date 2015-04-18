@@ -3,7 +3,6 @@
 #include "callback.h"
 #include "regs.h"
 #include "bios.h"
-#include "drives.h"								// WildFileCmp
 #include "dev_con.h"
 
 DOS_Device * Devices[DOS_DEVICES];

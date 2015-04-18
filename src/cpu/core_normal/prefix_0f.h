@@ -298,9 +298,7 @@
 			RUNEXCEPTION();
 		break;
 	CASE_0F_B(0xa2)												/* CPUID */
-		if (!CPU_CPUID())
-			goto illegal_opcode;
-		break;
+		goto illegal_opcode;
 	CASE_0F_W(0xa3)												/* BT Ew,Gw */
 		{
 		FillFlags();

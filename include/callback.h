@@ -7,8 +7,8 @@ typedef Bitu (*CallBack_Handler)(void);
 extern CallBack_Handler CallBack_Handlers[];
 
 enum {CB_RETF, CB_IRET, CB_IRET_STI, CB_IRET_EOI_PIC1,
-		CB_IRQ0, CB_IRQ1, CB_IRQ9, CB_IRQ12,
-		/*CB_INT28,*/ CB_INT29, CB_INT16, CB_HOOKABLE};
+		CB_IRQ0, CB_IRQ1, /*CB_IRQ9,*/ CB_IRQ12,
+		CB_INT29, CB_INT16, CB_HOOKABLE};
 
 #define CB_MAX		128
 #define CB_SIZE		32
@@ -43,9 +43,9 @@ void CALLBACK_RunRealInt(Bit8u intnum);
 void CALLBACK_Install(Bit8u intNo, CallBack_Handler handler, Bitu type);
 void CALLBACK_Setup(Bitu callback,CallBack_Handler handler,Bitu type);
 void CALLBACK_Setup(Bitu callback,CallBack_Handler handler,Bitu type,PhysPt addr);
+void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress);
 
 void CALLBACK_SCF(bool val);
 void CALLBACK_SZF(bool val);
-void CALLBACK_SIF(bool val);
 
 #endif

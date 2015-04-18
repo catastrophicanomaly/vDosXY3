@@ -219,8 +219,8 @@ void DOS_Shell::Run(void)
 		temp.RunInternal();												// Exits when no bf is found.
 		return;
 		}
-	if (cmd->FirstStart())												// Start a normal shell and check for a first command init// Start a normal shell and check for a first command init
-		ParseLine(strcpy(input_line, "AUTOEXEC.BAT"));
+	if (cmd->FirstStart())												// Start a normal shell and check for a first command init
+		bf = new BatchFile(this, "AUTOEXEC.BAT", "AUTOEXEC.BAT", "");
 	do
 		{
 		if (bf)
@@ -231,11 +231,14 @@ void DOS_Shell::Run(void)
 					{
 					ShowPrompt();
 					WriteOut_NoParsing(input_line);
+					WriteOut("\n");
 					}
 				ParseLine(input_line);
-				if (echo)
-					WriteOut("\n");
+//				if (echo)
+//					WriteOut("\n");
 				}
+			else
+				WriteOut("\n");
 			}
 		else
 			{
@@ -256,26 +259,6 @@ void DOS_Shell::Run(void)
 	while (!exit);
 	}
 
-char * init_line = "";
-
-void AUTOEXEC_Init()
-	{
-	FILE * aef = fopen("autoexec.txt", "rb");
-	if (aef)
-		{
-		int fsize = _filelength(_fileno(aef));
-		if (fsize > 0 && fsize < 4096)									// Just ignore if greater than 4K (probably something else)
-			{
-			fread((void *)tempBuff4K, 1, fsize, aef);
-			fclose(aef);
-			VFILE_Register("AUTOEXEC.BAT", (Bit8u *)tempBuff4K, (Bit16u)fsize);
-			init_line = "/INIT";
-			return;
-			}
-		fclose(aef);
-		}
-	}
-
 void SHELL_Init()
 	{
 	// Regular startup
@@ -286,7 +269,7 @@ void SHELL_Init()
 	SegSet16(cs, RealSeg(newcsip));
 	reg_ip = RealOff(newcsip);
 
-	PROGRAMS_MakeFile("COMMAND.COM", SHELL_ProgramStart);
+	PROGRAMS_MakeFile(SHELL_ProgramStart);
 
 	// Now call up the shell for the first time
 	Bit16u psp_seg = DOS_FIRST_SHELL;
@@ -315,7 +298,7 @@ void SHELL_Init()
 	envmcb.SetType(0x4d);
 	
 	// Setup environment
-	char env[] = "PROMPT=$P$G\0PATH=Z:\\\0COMSPEC=Z:\\COMMAND.COM\0\0\1\0Z:\\COMMAND.COM\0";
+	char env[] = "PROMPT=$P$G\0PATH=C:\\\0COMSPEC=C:\\COMMAND.COM\0\0\1\0C:\\COMMAND.COM\0";
 	Mem_CopyTo(SegOff2Ptr(env_seg, 0), env, sizeof(env));
 
 	DOS_PSP psp(psp_seg);
@@ -336,16 +319,15 @@ void SHELL_Init()
 	DOS_OpenFile("PRN", OPEN_READWRITE, &dummy);	// STDPRN		troubles me with FiAd, accessing it in subprograms and getting closed
 
 	psp.SetParent(psp_seg);
-	// Set the environment
-	psp.SetEnvironment(env_seg);
-	// Set the command line for the shell start up
-	CommandTail tail;
-	tail.count = (Bit8u)strlen(init_line);
-	strcpy(tail.buffer, init_line);
+
+	psp.SetEnvironment(env_seg);													// Set the environment
+
+	CommandTail tail;																// Set the command line for the shell start up
+	strcpy(tail.buffer, "/INIT");
+	tail.count = (Bit8u)strlen(tail.buffer);
 	Mem_CopyTo(SegOff2Ptr(psp_seg, 128), &tail, 128);
 	
-	// Setup internal DOS Variables
-	dos.dta(SegOff2dWord(psp_seg, 0x80));
+	dos.dta(SegOff2dWord(psp_seg, 0x80));											// Setup internal DOS Variables
 	dos.psp(psp_seg);
 	
 	SHELL_ProgramStart(&first_shell);

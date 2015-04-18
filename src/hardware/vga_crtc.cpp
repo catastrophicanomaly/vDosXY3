@@ -4,7 +4,6 @@
 #include "vga.h"
 #include "cpu.h"
 #include "video.h"
-#include "pic.h"
 
 
 #define crtc(blah) vga.crtc.blah
@@ -61,11 +60,7 @@ void vga_write_p3d5(Bitu port, Bitu val, Bitu iolen)
 		*/	
 		break;
 	case 0x06:																						// Vertical total register
-		if (val != crtc(vertical_total))
-			{
-			crtc(vertical_total) = val;	
-			VGA_StartResize();
-			}
+		crtc(vertical_total) = val;
 		/*	0-7	Lower 8 bits of the Vertical Total. Bit 8 is found in 3d4h index 7
 				bit 0. Bit 9 is found in 3d4h index 7 bit 5.
 			Note: For the VGA this value is the number of scan lines in the display -2.

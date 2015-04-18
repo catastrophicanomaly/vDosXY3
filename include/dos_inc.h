@@ -123,7 +123,7 @@ bool DOS_FreePrivatMemory(Bit16u seg, Bit16u pages);
 
 bool DOS_SetMemAllocStrategy(Bit16u strat);
 Bit16u DOS_GetMemAllocStrategy(void);
-void DOS_BuildUMBChain(bool ems_active);
+void DOS_BuildUMBChain(void);
 bool DOS_LinkUMBsToMemChain(Bit16u linkstate);
 
 // FCB stuff

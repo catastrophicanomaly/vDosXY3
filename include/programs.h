@@ -41,6 +41,7 @@ public:
 };
 
 typedef void (PROGRAMS_Main)(Program * * make);
-void PROGRAMS_MakeFile(char const * const name, PROGRAMS_Main * main);
+void PROGRAMS_MakeFile(PROGRAMS_Main * main);
+void PROGRAMS_ComSpecData(Bit8u *header);
 
 #endif

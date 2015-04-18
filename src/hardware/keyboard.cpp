@@ -2,8 +2,8 @@
 #include "inout.h"
 #ifdef WITHIRQ1
 #include "SDL_keysym.h"
-#include "pic.h"
 #endif
+#include <stdio.h>
 
 static Bitu dummy_read(Bitu /*port*/, Bitu /*iolen*/)
 	{
@@ -35,29 +35,27 @@ static struct {
 	bool scheduled;
 } keyb;
 
+
+
 static void KEYBOARD_SetPort60(Bit8u val) {
 	keyb.p60changed = true;
 	keyb.p60data = val;
-	PIC_ActivateIRQ(1);
+	//PIC_ActivateIRQ(1);
+	keyb_req = true;
+
 }
 
-static void KEYBOARD_TransferBuffer(Bitu val) {
-	keyb.scheduled = false;
-	if (!keyb.used) {
-		//LOG(LOG_KEYBOARD, LOG_NORMAL)("Transfer started with empty buffer");
-		return;
+
+void KEYBOARD_NextFromBuf()
+{
+	if (keyb.used && !keyb.p60changed)
+	{
+		Bit8u val = keyb.buffer[keyb.pos];
+		if (++keyb.pos >= KEYBUFSIZE) keyb.pos -= KEYBUFSIZE;
+		keyb.used--;
+		KEYBOARD_SetPort60(val);
 	}
-	KEYBOARD_SetPort60(keyb.buffer[keyb.pos]);
-	if (++keyb.pos >= KEYBUFSIZE) keyb.pos -= KEYBUFSIZE;
-	keyb.used--;
-}
 
-
-void KEYBOARD_ClrBuffer(void) {
-	keyb.used = 0;
-	keyb.pos = 0;
-	PIC_RemoveEvents((PIC_EventHandler)KEYBOARD_TransferBuffer);
-	keyb.scheduled = false;
 }
 
 static void KEYBOARD_AddBuffer(Bit8u data) {
@@ -69,21 +67,26 @@ static void KEYBOARD_AddBuffer(Bit8u data) {
 	if (start >= KEYBUFSIZE) start -= KEYBUFSIZE;
 	keyb.buffer[start] = data;
 	keyb.used++;
-	/* Start up an event to start the first IRQ */
-	if (!keyb.scheduled && !keyb.p60changed) {
-		keyb.scheduled = true;
-		PIC_AddEvent((PIC_EventHandler)KEYBOARD_TransferBuffer, KEYDELAY);
-	}
+	
+	KEYBOARD_NextFromBuf();
+		
 }
 
 
 static Bitu read_p60(Bitu port, Bitu iolen) {
+	/*if (!keyb.p60changed)
+		printf("Stale Read\n");
+	else
+		printf("Read\n");*/
 	keyb.p60changed = false;
-	if (!keyb.scheduled && keyb.used) {
-		keyb.scheduled = true;
-		PIC_AddEvent((PIC_EventHandler)KEYBOARD_TransferBuffer, KEYDELAY);
-	}
-	return keyb.p60data;
+	keyb_req = false;
+	Bitu res = keyb.p60data;
+	
+	//Moved to EOI processing
+	//Otherwise XY3 got into trouble due to too fast changing input
+	//It seems that the XY3 IRQ9 handler depends on reading the same value twice
+	//KEYBOARD_NextFromBuf();
+	return res;
 }
 
 

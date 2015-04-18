@@ -3,7 +3,6 @@
 #include "dos_inc.h"
 #include "callback.h"
 
-#define UMB_START_SEG 0x9fff
 #define MAXENV 512
 
 static Bit16u memAllocStrategy = 0;
@@ -14,7 +13,6 @@ static void DOS_CompressMemory(void)
 	DOS_MCB mcb(mcb_segment);
 	DOS_MCB mcb_next(0);
 	Bitu counter = 0;
-
 	while (mcb.GetType() != 'Z')
 		{
 		if (counter++ > 1000)
@@ -29,9 +27,9 @@ static void DOS_CompressMemory(void)
 			{
 			mcb_segment += mcb.GetSize()+1;
 			mcb.SetPt(mcb_segment);
-			if (mcb.GetType() == 'Z' && mcb_segment < UMB_START_SEG && dos_infoblock.GetStartOfUMBChain() == UMB_START_SEG)	// to UMB if used
+			if (mcb.GetType() == 'Z' && mcb_segment < EndConvMem && dos_infoblock.GetStartOfUMBChain() == EndConvMem)	// to UMB if used
 				{
-				mcb_segment = UMB_START_SEG;
+				mcb_segment = EndConvMem;
 				mcb.SetPt(mcb_segment);
 				}
 			}
@@ -50,8 +48,8 @@ void DOS_FreeProcessMemory(Bit16u pspseg)
 		if (mcb.GetPSPSeg() == pspseg)
 			mcb.SetPSPSeg(MCB_FREE);
 		if (mcb.GetType() == 'Z')
-			if (mcb_segment < UMB_START_SEG && dos_infoblock.GetStartOfUMBChain() == UMB_START_SEG)	// to UMB if used
-				mcb_segment = UMB_START_SEG;
+			if (mcb_segment < EndConvMem && dos_infoblock.GetStartOfUMBChain() == EndConvMem)	// to UMB if used
+				mcb_segment = EndConvMem;
 			else
 				break;
 		else
@@ -94,7 +92,7 @@ bool DOS_GetFreeUMB(Bit16u * total, Bit16u * largest, Bit16u * count)
 	{
 	*total = *largest = *count = 0;
 	Bit16u mcb_segment = dos_infoblock.GetStartOfUMBChain();
-	if (mcb_segment != UMB_START_SEG)
+	if (mcb_segment != EndConvMem)
 		return false;
 
 	DOS_CompressMemory();
@@ -125,7 +123,7 @@ bool DOS_AllocateMemory(Bit16u * segment, Bit16u * reqBlocks)
 	Bit16u mcb_segment = dos.firstMCB;
 
 	Bit16u umb_start = dos_infoblock.GetStartOfUMBChain();
-	if (umb_start == UMB_START_SEG && (mem_strat&0xc0))							// Start with UMBs if requested (bits 7 or 6 set)
+	if (umb_start == EndConvMem && (mem_strat&0xc0))								// Start with UMBs if requested (bits 7 or 6 set)
 		mcb_segment = umb_start;
 
 	DOS_MCB mcb(0);
@@ -184,7 +182,7 @@ bool DOS_AllocateMemory(Bit16u * segment, Bit16u * reqBlocks)
 		
 		if (mcb.GetType() == 'Z')													// Onward to the next MCB if there is one
 			{
-			if ((mem_strat&0x80) && (umb_start == UMB_START_SEG))
+			if ((mem_strat&0x80) && (umb_start == EndConvMem))
 				{
 				mcb_segment = dos.firstMCB;											// Bit 7 set: try upper memory first, then low
 				mem_strat &= (~0xc0);
@@ -243,7 +241,6 @@ bool DOS_ResizeMemory(Bit16u segment, Bit16u * blocks)
 	{
 	if (segment < DOS_MEM_START+1)
 		E_Exit("Program tried to resize MCB block %X", segment);
-      
 	DOS_MCB mcb(segment-1);
 	Bit8u mcb_type = mcb.GetType();
 	if (mcb_type != 'M' && mcb_type != 'Z')
@@ -314,12 +311,12 @@ bool DOS_FreeMemory(Bit16u segment)
 	return true;
 	}
 
-void DOS_BuildUMBChain(bool ems_active)
+void DOS_BuildUMBChain()
 	{
 	Bit16u first_umb_seg = DOS_PRIVATE_SEGMENT_END;
-	Bit16u first_umb_size = 0xf000 - first_umb_seg - (ems_active ? 0x1000 : 0);
+	Bit16u first_umb_size = 0xf000 - first_umb_seg - (TotEMSMB ? 0x1000 : 0);
 
-	dos_infoblock.SetStartOfUMBChain(UMB_START_SEG);
+	dos_infoblock.SetStartOfUMBChain(EndConvMem);
 	dos_infoblock.SetUMBChainState(0);										// UMBs not linked yet
 
 	DOS_MCB umb_mcb(first_umb_seg);
@@ -345,7 +342,7 @@ void DOS_BuildUMBChain(bool ems_active)
 bool DOS_LinkUMBsToMemChain(Bit16u linkstate)
 	{
 	Bit16u umb_start = dos_infoblock.GetStartOfUMBChain();					// Get start of UMB-chain
-	if (umb_start != UMB_START_SEG)
+	if (umb_start != EndConvMem)
 		return false;
 	if ((linkstate&1) == (dos_infoblock.GetUMBChainState()&1))
 		return true;
@@ -376,7 +373,6 @@ bool DOS_LinkUMBsToMemChain(Bit16u linkstate)
 			}
 		break;
 	default:
-		LOG_MSG("Invalid link state %x when reconfiguring MCB chain", linkstate);
 		return false;
 		}
 	return true;
@@ -413,7 +409,7 @@ void DOS_SetupMemory(bool low)
 //	mcb_sizes += 5;
 //	tempmcb.SetType(0x4d);
 
-	int extra_size = low ? 0 : 4096 - DOS_MEM_START - mcb_sizes - 17;	// disable first 64Kb if low not set in config
+	int extra_size = low ? 0 : 4096 - DOS_MEM_START - mcb_sizes - 17;				// Disable first 64Kb if low not set in config
 	// Lock the previous empty MCB
 	DOS_MCB tempmcb2((Bit16u)DOS_MEM_START+mcb_sizes);
 	tempmcb2.SetPSPSeg(0x40);
@@ -424,7 +420,8 @@ void DOS_SetupMemory(bool low)
 	DOS_MCB mcb((Bit16u)DOS_MEM_START+mcb_sizes);
 	mcb.SetPSPSeg(MCB_FREE);						// Free
 	mcb.SetType(0x5a);								// Last Block
-	mcb.SetSize(0x9FFE - DOS_MEM_START - mcb_sizes);
+//	mcb.SetSize(0x9FFE - DOS_MEM_START - mcb_sizes);
+	mcb.SetSize(EndConvMem - 1 - DOS_MEM_START - mcb_sizes);
 
 	dos.firstMCB = DOS_MEM_START;
 	dos_infoblock.SetFirstMCB(DOS_MEM_START);

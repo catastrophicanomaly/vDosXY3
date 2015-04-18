@@ -3,7 +3,7 @@
 #include <sys/types.h>
 #include "SDL.h"
 #include "..\..\SDL-1.2.15\include\SDL_syswm.h"
-#include "sdl_ttf.h"
+#include "ttf.h"
 #include "vDos.h"
 #include "video.h"
 #include "mouse.h"
@@ -77,7 +77,6 @@ static WNDPROC fnSDLDefaultWndProc;
 
 static int fullLeftOff, fullTopOff;
 
-
 static void TimedSetSize()
 	{
 	if (vga.mode == M_TEXT && ttf.fullScrn)
@@ -133,6 +132,7 @@ bool GFX_StartUpdate()
 int GFX_SetCodePage(int cp)
 	{
 	unsigned char cTest[256];														// ASCII format
+	TTF_Flush_Cache(ttf.SDL_font);													// Rendered glyph cache has to be cleared!
 	for (int i = 0; i < 256; i++)
 		cTest[i] = i;
 	Bit16u wcTest[256];
@@ -157,10 +157,12 @@ int GFX_SetCodePage(int cp)
 				{
 				if (!TTF_GlyphIsProvided(ttf.SDL_font, unimap))
 					notMapped++;
-				else 
+				else
 					cpMap[c] = unimap;
 				}
 			}
+		//if (eurAscii != -1 && TTF_GlyphIsProvided(ttf.SDL_font, 0x20ac))
+		//	cpMap[eurAscii] = 0x20ac;
 		return notMapped;
 		}
 	
@@ -171,14 +173,13 @@ int GFX_SetCodePage(int cp)
 
 void GFX_SelectFontByPoints(int ptsize)
 	{
-	if (ttf.SDL_font != 0)
-		TTF_CloseFont(ttf.SDL_font);
-	SDL_RWops *rwfont = SDL_RWFromConstMem(ttfFont, (int)ttfSize);
-	ttf.SDL_font = TTF_OpenFontRW(rwfont, 1, ptsize);
-
+	if (ttf.SDL_font == 0)
+		ttf.SDL_font = TTF_New_Memory_Face((const unsigned char*)ttfFont, ttfSize, ptsize);
+	else
+		TTF_SetCharSize(ttf.SDL_font, ptsize);
 	ttf.pointsize = ptsize;
-	TTF_GlyphMetrics(ttf.SDL_font, 65, NULL, NULL, NULL, NULL, &ttf.width);
-	ttf.height = TTF_FontAscent(ttf.SDL_font)-TTF_FontDescent(ttf.SDL_font);
+	ttf.width = TTF_FontWidth(ttf.SDL_font);
+	ttf.height = TTF_FontHeight(ttf.SDL_font);
 	if (ttf.fullScrn)
 		{
 		ttf.offX = (GetSystemMetrics(SM_CXSCREEN)-ttf.width*ttf.cols)/2;
@@ -252,11 +253,12 @@ void GFX_EndTextLines(void)
 	if (aboutShown || selectingText)												// The easy way: don't update if About box or selectting text
 		return;
 	
-	Uint16 unimap[txtMaxCols+1];													// Max+1 charaters in a line
+	char asciiStr[txtMaxCols+1];													// Max+1 charaters in a line
 	int xmin = ttf.cols;															// Keep track of changed area
 	int ymin = ttf.lins;
 	int xmax = -1;
 	int ymax = -1;
+	int style = 0;
 	Bit16u *curAC = curAttrChar;													// Old/current buffer
 	Bit16u *newAC = newAttrChar;													// New/changed buffer
 
@@ -268,11 +270,9 @@ void GFX_EndTextLines(void)
 	ttf_textClip.y = 0;
 	for (int y = 0; y < ttf.lins; y++)
 		{
-		if (!hasFocus)
-			if (y == 0)																// Dim topmost line
-				rgbColors = altBGR0;
-			else if (y == 1)
-				rgbColors = altBGR1;												// Undim the rest
+		rgbColors = altBGR1;
+		if (!hasFocus && (y == 0))													// Dim topmost line
+			rgbColors = altBGR0;
 
 		ttf_textRect.y = ttf.offY+y*ttf.height;
 		for (int x = 0; x < ttf.cols; x++)
@@ -283,12 +283,13 @@ void GFX_EndTextLines(void)
 				ymin = min(y, ymin);
 				ymax = y;
 				ttf_textRect.x = ttf.offX+x*ttf.width;
+				style = TTF_STYLE_NORMAL;
 
 				Bit8u colorBG = newAC[x]>>12;
 				Bit8u colorFG = (newAC[x]>>8)&15;
 				if (CurMode->mode == 7)												// Mono (Hercules)
 					{
-					TTF_SetFontStyle(ttf.SDL_font, (colorFG&7) == 1 ? TTF_STYLE_UNDERLINE : TTF_STYLE_NORMAL);
+					style = (colorFG&7) == 1 ? TTF_STYLE_UNDERLINE : TTF_STYLE_NORMAL;
 					if ((colorFG&0xa) == colorFG && colorBG == 0)
 						colorFG = 8;
 					else if (colorFG&7)
@@ -296,34 +297,33 @@ void GFX_EndTextLines(void)
 					}
 				else if (wpVersion > 0)												// If WP and not negative (color value to text attribute excluded)
 					{
-					if (colorFG == 0xe && colorBG == 1)
+//					if (colorFG == 0xe && colorBG == 1)								// Temporary? disabled
+//						{
+//						style =  TTF_STYLE_ITALIC;
+//						colorFG = 7;
+//						}
+					/*else*/ if ((colorFG == 1 || colorFG == 0xf) && colorBG == 7)
 						{
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_ITALIC);
-						colorFG = 7;
-						}
-					else if ((colorFG == 1 || colorFG == 0xf) && colorBG == 7)
-						{
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_UNDERLINE);
+						style = TTF_STYLE_UNDERLINE;
 						colorBG = 1;
 						colorFG = colorFG == 1 ? 7 : 0xf;
 						}
 					else
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_NORMAL);
+						style = TTF_STYLE_NORMAL;
 					}
 				else if (wsVersion)													// If WordStar
 					{
-					int style = 0;
 					if (colorBG&8)													// If "blinking" set, modify attributes
 						{
 						if (colorBG&1)
 							style |= TTF_STYLE_UNDERLINE;
-						if (colorBG&2)
-							style |= TTF_STYLE_ITALIC;
+//						if (colorBG&2)												// Temporary? disabled
+//							style |= TTF_STYLE_ITALIC;
 						if (colorBG&4)
 							style |= TTF_STYLE_STRIKETHROUGH;
-						colorBG = wsBackGround;										// Background color (text) is fixed at this
 						}
-					TTF_SetFontStyle(ttf.SDL_font, style);
+					if (style)
+						colorBG = wsBackGround;										// Background color (text) is fixed at this
 					}
 				ttf_bgColor.b = rgbColors[colorBG].blue;
 				ttf_bgColor.g = rgbColors[colorBG].green;
@@ -334,7 +334,7 @@ void GFX_EndTextLines(void)
 
 				int x1 = x;
 				Bit8u ascii = newAC[x]&255;
-				if (ascii > 175 && ascii < 179)										// Special: shade characters 176-178
+				if (cpMap[ascii] > 0x2590 && cpMap[ascii] < 0x2594)					// Special: characters 176-178 = shaded block
 					{
 					ttf_bgColor.b = (ttf_bgColor.b*(179-ascii) + ttf_fgColor.b*(ascii-175))>>2;
 					ttf_bgColor.g = (ttf_bgColor.g*(179-ascii) + ttf_fgColor.g*(ascii-175))>>2;
@@ -342,7 +342,7 @@ void GFX_EndTextLines(void)
 					do																// As long char and foreground/background color equal
 						{
 						curAC[x] = newAC[x];
-						unimap[x-x1] = ' ';											// Shaded space
+						asciiStr[x-x1] = 32;										// Shaded space
 						x++;
 						}
 					while (x < ttf.cols && newAC[x] == newAC[x1] && newAC[x] != curAC[x]);
@@ -353,16 +353,15 @@ void GFX_EndTextLines(void)
 					do																// As long foreground/background color equal
 						{
 						curAC[x] = newAC[x];
-						unimap[x-x1] = cpMap[ascii];
+						asciiStr[x-x1] = ascii;
 						x++;
 						ascii = newAC[x]&255;
 						}
 					while (x < ttf.cols && newAC[x] != curAC[x] && newAC[x]>>8 == color && (ascii < 176 || ascii > 178));
 					}
-				unimap[x-x1] = 0;
 				xmax = max(x-1, xmax);
 
-				SDL_Surface* textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_fgColor, ttf_bgColor);
+				SDL_Surface* textSurface = TTF_RenderASCII(ttf.SDL_font, asciiStr, x-x1, ttf_fgColor, ttf_bgColor, style);
 				ttf_textClip.w = (x-x1)*ttf.width;
 				SDL_BlitSurface(textSurface, &ttf_textClip, sdl.surface, &ttf_textRect);
 				SDL_FreeSurface(textSurface);
@@ -404,21 +403,22 @@ void GFX_EndTextLines(void)
 				{
 				Bit8u colorBG = newAttrChar[ttf.cursor]>>12;
 				Bit8u colorFG = (newAttrChar[ttf.cursor]>>8)&15;
+				style = TTF_STYLE_NORMAL;
 				if (wpVersion > 0)													// If WP and not negative (color value to text attribute excluded)
 					{
-					if (colorFG == 0xe && colorBG == 1)
+//					if (colorFG == 0xe && colorBG == 1)								// Temporary? disabled
+//						{
+//						style = TTF_STYLE_ITALIC;
+//						colorFG = 7;
+//						}
+					/*else*/ if ((colorFG == 1 || colorFG == 0xf) && colorBG == 7)
 						{
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_ITALIC);
-						colorFG = 7;
-						}
-					else if ((colorFG == 1 || colorFG == 0xf) && colorBG == 7)
-						{
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_UNDERLINE);
+						style = TTF_STYLE_UNDERLINE;
 						colorBG = 1;
 						colorFG = colorFG == 1 ? 7 : 0xf;
 						}
 					else
-						TTF_SetFontStyle(ttf.SDL_font, TTF_STYLE_NORMAL);
+						style= TTF_STYLE_NORMAL;
 					}
 				ttf_bgColor.b = rgbColors[colorBG].blue;
 				ttf_bgColor.g = rgbColors[colorBG].green;
@@ -426,12 +426,11 @@ void GFX_EndTextLines(void)
 				ttf_fgColor.b = rgbColors[colorFG].blue;
 				ttf_fgColor.g = rgbColors[colorFG].green;
 				ttf_fgColor.r = rgbColors[colorFG].red;
-				unimap[0] = cpMap[newAttrChar[ttf.cursor]&255];
-				unimap[1] = 0;
+				asciiStr[0] = newAttrChar[ttf.cursor]&255;
 				// first redraw character
 				
 	
-				SDL_Surface* textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_fgColor, ttf_bgColor);
+				SDL_Surface* textSurface = TTF_RenderASCII(ttf.SDL_font, asciiStr, 1, ttf_fgColor, ttf_bgColor, style);
 
 				ttf_textClip.w = ttf.width;
 				ttf_textRect.x = ttf.offX + x*ttf.width;
@@ -442,7 +441,8 @@ void GFX_EndTextLines(void)
 				// seccond reverse lower lines
 				if (vga.draw.cursor.blinkon || !blinkCursor)
 				{
-					textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_bgColor, ttf_fgColor);
+//				textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_bgColor, ttf_fgColor);
+				textSurface = TTF_RenderASCII(ttf.SDL_font, asciiStr, 1, ttf_bgColor, ttf_fgColor, style);
 					ttf_textClip.y = (ttf.height*vga.draw.cursor.sline) >> 4;
 					ttf_textClip.h = ttf.height - ttf_textClip.y;						// For now, cursor to bottom
 					ttf_textRect.y = ttf.offY + y*ttf.height + ttf_textClip.y;
@@ -464,9 +464,8 @@ void GFX_EndTextLines(void)
 		ttf_bgColor.b = rgbColors[color].blue;
 		ttf_bgColor.g = rgbColors[color].green;
 		ttf_bgColor.r = rgbColors[color].red;
-		unimap[0] = cpMap[45];														// '-'
-		unimap[1] = 0;
-		SDL_Surface* textSurface = TTF_RenderUNICODE_Shaded(ttf.SDL_font, unimap, ttf_fgColor, ttf_bgColor);
+		asciiStr[0] = 45;															// '-'
+		SDL_Surface* textSurface = TTF_RenderASCII(ttf.SDL_font, asciiStr, 1, ttf_fgColor, ttf_bgColor, 0);
 		ttf_textClip.w = ttf.width;
 		ttf_textClip.y = ttf.height>>2;
 		ttf_textClip.h = ttf.height>>1;
@@ -555,6 +554,8 @@ void readTTF(const char *fName)														// Open and read alternative font
 
 	strcpy(ttfPath, fName);															// Try to load it from working directory
 	strcat(ttfPath, ".ttf");
+	AddFontResourceEx(ttfPath, FR_PRIVATE, 0);
+
 	if (!(ttf_fh  = fopen(ttfPath, "rb")))
 		{
 		strcpy(strrchr(strcpy(ttfPath, _pgmptr), '\\')+1, fName);					// Try to load it from where vDos was started
@@ -782,9 +783,13 @@ void GUI_StartUp()
 
 	usesMouse = ConfGetBool("mouse");
 	blinkCursor = ConfGetBool("blinkc");
-//	wpVersion = ConfGetInt("wp");													// If negative, exclude some WP stuff in the future
 	winFramed = ConfGetBool("frame");
 	sdl.scale = ConfGetInt("scale");
+	//eurAscii = ConfGetInt("euro");
+	//if (eurAscii != -1 && (eurAscii < 33 || eurAscii > 255))
+	//	E_Exit("Config.txt: Euro ASCII value has to be between 33 and 255");
+	if (sdl.scale < 0 || sdl.scale > 9)
+		E_Exit("Config.txt: scale factor has to be between 1 and 9");
 	char *wpStr = ConfGetString("WP");
 	if (*wpStr)
 		if (!getWP(wpStr))
@@ -828,9 +833,11 @@ void GUI_StartUp()
 		maxHeight -= GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYBORDER)*2;
 		}
 
-	if (sdl.scale < 1 || sdl.scale > 9)												// 0 = probably not in config.txt, max = 9
+	int maxScale = min(maxWidth/640, maxHeight/480);								// Based on max resolution supported VGA modes
+	if (sdl.scale > maxScale)
+		E_Exit("Config.txt: scale factor too high for screen resolution");
+	if (sdl.scale < 1)																// 0 = probably not set in config.txt
 		{
-		sdl.scale = 1;																// Parachute to 1
 		sdl.scale = min(maxWidth/640, maxHeight/480);								// Based on max resolution supported VGA modes
 		if (sdl.scale < 1)															// Probably overkill
 			sdl.scale = 1;
@@ -855,7 +862,7 @@ void GUI_StartUp()
 			if (curSize < 12)														// Minimum size = 12
 				curSize = 12;
 			}
-		else if (--curSize < 12)													// Silly, but OK, youy never know..
+		else if (--curSize < 12)													// Silly, but OK, you never know..
 			E_Exit("Cannot accommodate a window for %dx%d", ttf.lins, ttf.cols);
 		}
 	if (ttf.vDos)																	// Make it even for vDos internal font (a bit nicer)
@@ -878,6 +885,11 @@ void GUI_StartUp()
 
     fnSDLDefaultWndProc = (WNDPROC)GetWindowLongPtr(wminfo.window, GWLP_WNDPROC);
     SetWindowLongPtr(sdlHwnd, GWLP_WNDPROC, (LONG_PTR)&SysMenuExtendWndProc);
+
+	/*AllocConsole();
+	freopen("CONIN$", "r", stdin);
+	freopen("CONOUT$", "w", stdout);
+	freopen("CONOUT$", "w", stderr);*/
 	return;
 	}
 
@@ -885,31 +897,21 @@ void GUI_StartUp()
 static Bit16u deadKey = 0;
 static int winMoving = 0;
 
-
 void GFX_Events()
 	{
 	SDL_Event event;
 	while (SDL_PollEvent(&event))
 		{
 		if (!newAttrChar)															// First message is SDL_MOUSEMOTION w/o newAttrChar being initialized
-			return;
+			continue;
+//		if (!ttf.fullScrn && vga.mode == M_TEXT && !winFramed)						// Reverted by request of Robert Swayer
 		if (vga.mode == M_TEXT && !winFramed)
-			if (GetFocus() != sdlHwnd)
+			if ((GetFocus() == sdlHwnd) != hasFocus)
 				{
-				if (hasFocus)
-					{
-					hasFocus = false;
-					memset(curAttrChar, -1, ttf.cols*2);							// Force redraw of top line
-					GFX_EndTextLines();
-					}
-				}
-			else if (!hasFocus)
-				{
-				hasFocus = true;
+				hasFocus = !hasFocus;
 				memset(curAttrChar, -1, ttf.cols*2);								// Force redraw of top line
 				GFX_EndTextLines();
 				}
-
 		switch (event.type)
 			{
 		case SDL_MOUSEMOTION:
@@ -930,7 +932,7 @@ void GFX_Events()
 					InvertRect(hDC, &selBox2);
 					ReleaseDC(sdlHwnd, hDC);
 					}
-				return;
+				break;
 				}
 			if (vga.mode == M_TEXT && !hasFocus)
 				break;
@@ -1025,7 +1027,7 @@ void GFX_Events()
 				ReleaseDC(sdlHwnd, hDC);
 				SDL_WM_GrabInput(SDL_GRAB_ON);										// Restrict mouse to window
 				selectingText = true;
-				return;
+				break;
 				}
 			winMoving = 0;
 			if (!winFramed && !ttf.fullScrn && vga.mode == M_TEXT && event.button.button == 1 && event.button.state == SDL_PRESSED)	//Minimize?
@@ -1034,7 +1036,7 @@ void GFX_Events()
 					if (event.button.y <= ttf.offY+ttf.height/2 && event.button.x >= ttf.offX+sdl.width-ttf.width)
 						{
 						ShowWindow(sdlHwnd, SW_MINIMIZE);
-						return;
+						break;
 						}
 					winMoving = 1;
 					}
@@ -1081,7 +1083,7 @@ void GFX_Events()
 		    if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == 28 && ((event.key.keysym.mod&KMOD_LALT) || (event.key.keysym.mod&KMOD_RALT)))
 				{
 				if (CurMode->type == M_EGA)
-					return;
+					break;
 				ttf.fullScrn = !ttf.fullScrn;
 				if (ttf.fullScrn)
 					{
@@ -1117,7 +1119,7 @@ void GFX_Events()
 					MoveWindow(sdlHwnd, prevPosition.left, prevPosition.top, prevPosition.right-prevPosition.left, prevPosition.bottom-prevPosition.top, false);
 				memset(curAttrChar, -1, ttf.cols*ttf.lins*2);
 				GFX_EndTextLines();
-				return;
+				break;
 				}
 			// [Win][Ctrl]+C dumps screen to file screen.txt and opens it with application (default notepad) assigned to .txt files
 		    if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == 46 && (event.key.keysym.mod&KMOD_CTRL) && ((GetKeyState(VK_LWIN)&0x80) || (GetKeyState(VK_RWIN)&0x80)))
@@ -1125,13 +1127,13 @@ void GFX_Events()
 				if (dumpScreen())
 					{
 					screendump = true;
-					return;
+					break;
 					}
 				}
 			else if (screendump && event.type == SDL_KEYUP && event.key.keysym.scancode == 46)
 				{
 				screendump = false;
-				return;
+				break;
 				}
 			if (event.type == SDL_KEYUP && event.key.keysym.scancode == 0 && event.key.keysym.sym == 306)
 				event.key.keysym.scancode = 29;										// Need to repair this after intercepting the 'C' of [Win][Ctr]+C
@@ -1141,12 +1143,12 @@ void GFX_Events()
 				{
 				getClipboard();
 				screendump = true;
-				return;
+				break;
 				}
 			else if (screendump && event.type == SDL_KEYUP && event.key.keysym.scancode == 47)
 				{
 				screendump = false;
-				return;
+				break;
 				}
 
  			// Pointsize modifiers, we can't use some <Shift>/<Ctrl> combination, SDL_SetVideoMode() messes up SDL keyboard!
@@ -1154,13 +1156,13 @@ void GFX_Events()
 				{
 				if (event.type == SDL_KEYDOWN && !ttf.fullScrn)						// Increase fontsize
 					increaseFontSize();
-				return;
+				break;
 				}
 			if (event.key.keysym.scancode == 87 && ((GetKeyState(VK_LWIN)&0x80) || (GetKeyState(VK_RWIN)&0x80)))	// Intercept <Win>F11
 				{
 				if (event.type == SDL_KEYDOWN && !ttf.fullScrn)						// Decrease fontsize
 					decreaseFontSize();
-				return;
+				break;
 				}
 #ifdef WITHIRQ1
 			if (!useIrq1)
@@ -1175,11 +1177,11 @@ void GFX_Events()
 						event.key.keysym.sym = (SDLKey)94;
 
 					if (!deadKey && event.type == SDL_KEYDOWN && event.key.keysym.unicode == 0)
-						//			if (!deadKey && event.type == SDL_KEYDOWN)
+//			if (!deadKey && event.type == SDL_KEYDOWN)
 						if (event.key.keysym.sym == SDLK_QUOTE || event.key.keysym.sym == SDLK_QUOTEDBL || event.key.keysym.sym == SDLK_BACKQUOTE || event.key.keysym.sym == 126 || event.key.keysym.sym == SDLK_CARET)
 						{
 						deadKey = event.key.keysym.sym;
-						return;
+					break;
 						}
 
 					if (deadKey && event.type == SDL_KEYDOWN)
@@ -1196,23 +1198,13 @@ void GFX_Events()
 									}
 							BIOS_AddKeyToBuffer(deadKey);
 							if (event.key.keysym.sym != 32)									// If not space, add character
-							{
-								int correct = 0;
-								if (event.key.keysym.sym >= 'a' && event.key.keysym.sym <= 'z')		// Shift reported as unshifted, CAPS not handled
-								{
-									if (event.key.keysym.mod&KMOD_CAPS)
-										correct = -32;
-									if (event.key.keysym.mod&(KMOD_LSHIF | KMOD_RSHIFT))
-										correct = -(correct + 32);
-								}
 								BIOS_AddKeyToBuffer(event.key.keysym.sym);
-							}
 							deadKey = 0;
-							return;
+					break;
 						}
 					}
 					if (deadKey && event.type == SDL_KEYUP && event.key.keysym.sym == deadKey)
-						return;
+				break;
 #ifdef WITHIRQ1
 			}
 #endif
@@ -1266,9 +1258,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		
 #endif
 		if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE ))						// Init SDL
-			E_Exit("Could't init SDL, %s", SDL_GetError());
-		if (TTF_Init())																// Init SDL-TTF
-			E_Exit("Could't init SDL-TTF, %s", SDL_GetError());
+			E_Exit("Could't init SDL library");
+		TTF_Init();																	// Init SDL-TTF
 
 		SDL_putenv("SDL_VIDEO_CENTERED=center");
 		
@@ -1278,7 +1269,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		SDL_EnableKeyRepeat(ConfGetInt("kbrepdel"), ConfGetInt("kbrepinter"));
 		SDL_EnableUNICODE(true);
 
-		vDOS_Init();
+		vDos_Init();
 
 		
 		}

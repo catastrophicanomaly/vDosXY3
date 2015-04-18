@@ -11,8 +11,6 @@
 
 // CPU Cycle Timing
 extern Bit32s CPU_Cycles;
-extern Bit32s CPU_CycleLeft;
-//extern Bit32s CPU_CycleMax;
 
 // Some common Defines
 // A CPU Handler
@@ -21,7 +19,6 @@ extern CPU_Decoder * cpudecoder;
 
 Bits CPU_Core_Normal_Run(void);
 Bits CPU_Core_Normal_Trap_Run(void);
-Bits PageFaultCore(void);
 
 // CPU Stuff
 extern Bit16u parity_lookup[256];
@@ -59,10 +56,10 @@ bool CPU_LMSW(Bitu word);
 void CPU_VERR(Bitu selector);
 void CPU_VERW(Bitu selector);
 
-void CPU_JMP(bool use32,Bitu selector,Bitu offset/*,Bitu oldeip*/);
-void CPU_CALL(bool use32,Bitu selector,Bitu offset,Bitu oldeip);
-void CPU_RET(bool use32,Bitu bytes,Bitu oldeip);
-void CPU_IRET(bool use32,Bitu oldeip);
+void CPU_JMP(bool use32, Bitu selector, Bitu offset);
+void CPU_CALL(bool use32, Bitu selector, Bitu offset, Bitu oldeip);
+void CPU_RET(bool use32, Bitu bytes);
+void CPU_IRET(bool use32);
 void CPU_HLT(Bitu oldeip);
 
 void CPU_POPF(Bitu use32);
@@ -82,17 +79,17 @@ void CPU_ENTER(bool use32,Bitu bytes,Bitu level);
 
 void CPU_Interrupt(Bitu num,Bitu type, Bitu oldeip);
 
-static inline void CPU_HW_Interrupt(Bitu num)
+static void CPU_HW_Interrupt(Bitu num)
 	{
 	CPU_Interrupt(num, 0, reg_eip);
 	}
 
-static inline void CPU_SW_Interrupt(Bitu num, Bitu oldeip)
+static void CPU_SW_Interrupt(Bitu num, Bitu oldeip)
 	{
 	CPU_Interrupt(num, CPU_INT_SOFTWARE, oldeip);
 	}
 
-static inline void CPU_SW_Interrupt_NoIOPLCheck(Bitu num, Bitu oldeip)
+static void CPU_SW_Interrupt_NoIOPLCheck(Bitu num, Bitu oldeip)
 	{
 	CPU_Interrupt(num,CPU_INT_SOFTWARE|CPU_INT_NOIOPLCHECK, oldeip);
 	}
@@ -103,7 +100,6 @@ void CPU_Exception(Bitu which, Bitu error=0);
 bool CPU_SetSegGeneral(SegNames seg, Bitu value);
 bool CPU_PopSeg(SegNames seg, bool use32);
 
-bool CPU_CPUID(void);
 Bitu CPU_Pop16(void);
 Bitu CPU_Pop32(void);
 void CPU_Push16(Bitu value);
@@ -272,10 +268,6 @@ public:
 	Bitu Type(void)
 		{
 		return saved.seg.type;
-		}
-	Bitu Conforming(void)
-		{
-		return saved.seg.type & 8;
 		}
 	Bitu DPL(void)
 		{

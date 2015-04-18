@@ -18,23 +18,14 @@
 #define FLAG_NT		0x00004000
 #define FLAG_VM		0x00020000
 #define FLAG_AC		0x00040000
-#define FLAG_ID		0x00200000
 
 #define FMASK_TEST		(FLAG_CF | FLAG_PF | FLAG_AF | FLAG_ZF | FLAG_SF | FLAG_OF)
 #define FMASK_NORMAL	(FMASK_TEST | FLAG_DF | FLAG_TF | FLAG_IF )	
 #define FMASK_ALL		(FMASK_NORMAL | FLAG_IOPL | FLAG_NT)
 
 #define SETFLAGBIT(TYPE,TEST) if (TEST) reg_flags|=FLAG_ ## TYPE; else reg_flags&=~FLAG_ ## TYPE
-
 #define GETFLAG(TYPE) (reg_flags & FLAG_ ## TYPE)
-#define GETFLAGBOOL(TYPE) ((reg_flags & FLAG_ ## TYPE) ? true : false )
-
 #define GETFLAG_IOPL ((reg_flags & FLAG_IOPL) >> 12)
-
-struct Segment {
-	Bit16u val;
-	PhysPt phys;							// The phyiscal address start in emulated machine
-};
 
 enum SegNames {es=0, cs, ss, ds, fs, gs};
 
@@ -88,18 +79,6 @@ enum {
 	REGI_SP, REGI_BP, REGI_SI, REGI_DI
 };
 
-enum {
-	REGI_AL, REGI_CL, REGI_DL, REGI_BL,
-	REGI_AH, REGI_CH, REGI_DH, REGI_BH
-};
-
-
-//macros to convert a 3-bit register index to the correct register
-#define reg_8l(reg) (cpu_regs.regs[(reg)].byte[BL_INDEX])
-#define reg_8h(reg) (cpu_regs.regs[(reg)].byte[BH_INDEX])
-#define reg_8(reg) ((reg) & 4 ? reg_8h((reg) & 3) : reg_8l((reg) & 3))
-#define reg_16(reg) (cpu_regs.regs[(reg)].word[W_INDEX])
-#define reg_32(reg) (cpu_regs.regs[(reg)].dword[DW_INDEX])
 
 #define reg_al cpu_regs.regs[REGI_AX].byte[BL_INDEX]
 #define reg_ah cpu_regs.regs[REGI_AX].byte[BH_INDEX]

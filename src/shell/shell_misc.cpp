@@ -1,13 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
-#include <algorithm>	//std::copy
-#include <iterator>		//std::front_inserter
 #include "shell.h"
 #include "regs.h"
 #include "callback.h"
 #include "support.h"
-
-#include "timer.h"
 #include "bios.h"
 
 static char* exec_ext[] = {".COM", ".EXE", ".BAT"};
@@ -105,18 +101,15 @@ void DOS_Shell::InputCommand(char * line)
 				DOS_WriteFile(STDOUT, (Bit8u *)line, &len);
 				it_history ++;
 				break;
-			case 0x50:															// DOWN
+			case 0x50:																// DOWN
 				if (l_history.empty() || it_history == l_history.begin())
 					break;
 				// not very nice but works ..
 				it_history --;
-				if (it_history == l_history.begin())
+				if (it_history == l_history.begin())								// No previous commands in history
 					{
-					// no previous commands in history
 					it_history ++;
-
-					// remove current command from history
-					if (current_hist)
+					if (current_hist)												// Remove current command from history
 						{
 						current_hist = false;
 						l_history.pop_front();
@@ -126,7 +119,7 @@ void DOS_Shell::InputCommand(char * line)
 				else
 					it_history --;
 
-				WriteOut("\033[u\033[K");										// Go to prompt and erase all right of it
+				WriteOut("\033[u\033[K");											// Go to prompt and erase all right of it
 				strcpy(line, it_history->c_str());
 				len = (Bit16u)it_history->length();
 				str_len = str_index = len;
@@ -178,24 +171,21 @@ void DOS_Shell::InputCommand(char * line)
 					memmove(&line[str_index-1], &line[str_index], str_remain);
 					line[--str_len] = 0;
 					str_index --;
-					// Go back to redraw
-					for (Bit16u i = str_index; i < str_len; i++)
+					for (Bit16u i = str_index; i < str_len; i++)					// Go back to redraw
 						outc(line[i]);
 					}
 				else
 					{
-					line[--str_index] = '\0';
+					line[--str_index] = 0;
 					str_len--;
 					}
 				outc(' ');
 				outc(8);
-				// moves the cursor left
-				while (str_remain--)
+				while (str_remain--)												// Moves the cursor left
 					outc(8);
 				}
 			break;
 		case 0x0a:																	// New Line not handled
-			/* Don't care */
 			break;
 		case 0x0d:																	// Return
 			outc('\n');
@@ -244,16 +234,12 @@ void DOS_Shell::InputCommand(char * line)
 		return;
 
 	str_len++;
-
-	// remove current command from history if it's there
-	if (current_hist)
+	if (current_hist)																// Remove current command from history if it's there
 		{
 		current_hist = false;
 		l_history.pop_front();
 		}
-
-	// add command line to history
-	l_history.push_front(line); it_history = l_history.begin();
+	l_history.push_front(line); it_history = l_history.begin();						// Add command line to history
 	}
 
 bool DOS_Shell::Execute(char* name, char* args)

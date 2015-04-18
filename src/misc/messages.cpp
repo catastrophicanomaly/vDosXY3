@@ -4,7 +4,6 @@
 #include "vDos.h"
 #include "support.h"
 #include <list>
-#include <string>
 using namespace std;
 
 struct MessageBlock {
@@ -20,64 +19,6 @@ typedef list<MessageBlock>::iterator itmb;
 void inline MSG_Add(const char * _name, const char* _val)
 	{
 	Lang.push_back(MessageBlock(_name, _val));
-	}
-
-static void MSG_Replace(const char * _name, const char* _val)
-	{
-	for (itmb tel = Lang.begin(); tel != Lang.end(); tel++)				// Find the message
-		if ((*tel).name == _name)
-			{ 
-			(*tel).val = _val;
-			return;
-			}
-	}
-
-static void LoadMessageFile(void)
-	{
-	FILE * mfile;
-	char fName[] = "language.txt";
-	char path[512];
-
-	if (!(mfile  = fopen(fName, "r")))
-		{
-		strcpy(strrchr(strcpy(path, _pgmptr), '\\')+1, fName);			// Try to load it from where vDos was started
-		if (!(mfile  = fopen(path, "r")))
-			return;
-		}
-
-	char *linein = (char *)tempBuff2K;
-	char *name = (char *)tempBuff1K;
-	char *string = (char *)tempBuff4K;
-	
-	name[0] = 0;														// Start out with empty strings
-	string[0] = 0;
-	while (fgets(linein, 2048, mfile))									// Parse the read line
-		{
-		char * parser = linein;
-		char * writer = linein;
-		while (*parser)													// First remove characters 10 and 13 from the line
-			{
-			if (*parser != 10 && *parser != 13)
-				*writer++ = *parser;
-			*parser++;
-			}
-		*writer = 0;
-		if (linein[0] == ':')											// New string name
-			{
-			string[0] = 0;												// End of string marker
-			strcpy(name, linein+1);
-			}
-		else if (linein[0] == '.')										// Replace/Add the string to the internal langaugefile
-			{
-			size_t ll = strlen(string);
-			if (ll && string[ll - 1] == '\n')							// Remove last newline (marker is \n)
-				string[ll - 1] = 0;										// Second if should not be needed, but better be safe.
-			MSG_Replace(name, string);
-			}
-		else															// Normal string to be added
-			strcat(strcat(string, linein), "\n");
-		}
-	fclose(mfile);
 	}
 
 void MSG_Init()
@@ -163,6 +104,7 @@ void MSG_Init()
 
 	MSG_Add("MEM:INTRO",				"\n  Free memory:\n");
 	MSG_Add("MEM:CONVEN",				"%5dK Conventional\n");
+	MSG_Add("MEM:EXT",					"%5dK Extended\n");
 	MSG_Add("MEM:XMS",					"%5dK XMS\n");
 	MSG_Add("MEM:EMS",					"%5dK EMS\n");
 	MSG_Add("MEM:UPPER1",				"%5dK Upper\n");
@@ -199,8 +141,6 @@ void MSG_Init()
 	MSG_Add("SET:OUT_OF_SPACE",			"Not enough environment space left\n");
 	MSG_Add("TIME:NOW",					"Current time is %2u:%02u:%02u.%02u\n");
 	MSG_Add("VER:MESS",					"vDos %s, reported DOS version: %d.%02d\n");
-
-	LoadMessageFile();
 	}
 
 

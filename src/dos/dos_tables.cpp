@@ -43,7 +43,7 @@ static Bit8u country_info[0x22] = {
 	0x00, 0x00, 0x00, 0x00, 0x00					// Reservered 5
 };
 
-static Bit8u filenamechartable[0x18] = {
+static Bit8u filenamechartable[24] = {
 	0x16, 0x00, 0x01,
 	0x00, 0xff,										// Allowed chars from .. to
 	0x00,
@@ -94,31 +94,6 @@ void DOS_SetupTables(void)
 	PhysPt p_addr = dWord2Ptr(dos.tables.filenamechar);
 	for (i = 0; i < sizeof(filenamechartable); i++)
 		Mem_Stosb(p_addr++, filenamechartable[i]);
-/*
-	Mem_Stosw(dWord2Ptr(dos.tables.filenamechar)+0x00, 0x16);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x02, 0x01);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x03, 0x00);	// allowed chars from
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x04, 0xff);	// ...to
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x05, 0x00);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x06, 0x00);	// excluded chars from
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x07, 0x20);	// ...to
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x08, 0x02);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x09, 0x0e);	// number of illegal separators
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0a, 0x2e);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0b, 0x22);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0c, 0x2f);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0d, 0x5c);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0e, 0x5b);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x0f, 0x5d);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x10, 0x3a);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x11, 0x7c);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x12, 0x3c);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x13, 0x3e);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x14, 0x2b);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x15, 0x3d);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x16, 0x3b);
-	Mem_Stosb(dWord2Ptr(dos.tables.filenamechar)+0x17, 0x2c);
-*/
 	// COLLATING SEQUENCE TABLE + UPCASE TABLE
 	// 256 bytes for col table, 128 for upcase, 4 for number of entries
 	dos.tables.collatingseq = SegOff2dWord(DOS_GetPrivatMemory(25), 0);

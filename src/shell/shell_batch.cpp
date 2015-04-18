@@ -1,124 +1,108 @@
 #include <stdlib.h>
 #include <string.h>
-
+#include <fcntl.h>
 #include "shell.h"
 #include "support.h"
+#include <sys/types.h>
+#include <sys/stat.h>
 
 BatchFile::BatchFile(DOS_Shell * host, char const * const resolved_name, char const * const entered_name, char const * const cmd_line)
 	{
-	location = 0;
+	struct _stat statBuf;
+
 	prev = host->bf;
 	echo = host->echo;
 	shell = host;
+	location = 0;
+	bfSize = 0;
 	char totalname[DOS_PATHLENGTH+4];
-	DOS_Canonicalize(resolved_name, totalname);		// Get fullname including drive specificiation
-	cmd = new CommandLine(entered_name, cmd_line);
-	filename = totalname;
-
-	// Test if file is openable
-	if (!DOS_OpenFile(totalname,128, &file_handle))
+	DOS_Canonicalize(resolved_name, totalname);										// Get fullname including drive specificiation
+	char winPathName[512];
+	if (!stricmp(totalname, "C:\\AUTOEXEC.BAT"))
+		strcpy(winPathName, "autoexec.txt");
+	else
+		strcat(strcpy(winPathName,  Drives[*totalname-'A']->GetWinDir()), totalname+3);
+	if (!_stat(winPathName, &statBuf))
 		{
-		// TODO Come up with something better
-		E_Exit("SHELL: Can't open BatchFile %s", totalname);
+		if (statBuf.st_size > 65534)
+			E_Exit("%s exceeds maximum batch file size of 64KB", resolved_name);
+		if (!(bfText = (char *)malloc(statBuf.st_size+1)))
+			E_Exit("Couldn't allocate memory to run batch file: %s", resolved_name);
+		int fd;
+		if(!_sopen_s(&fd, winPathName, _O_RDONLY | _O_TEXT, _SH_DENYNO, 0))
+			{
+			bfSize = _read(fd, bfText, statBuf.st_size);
+			close(fd);
+//			bfText[bfSize] = 0;
+			if (bfSize == -1)
+				bfSize = 0;
+			}
 		}
-	DOS_CloseFile(file_handle);
+	else
+		bfText = (char *)malloc(16);
+	bfText[bfSize] = 0;
+	cmd = new CommandLine(entered_name, cmd_line);
 	}
 
 BatchFile::~BatchFile()
 	{
+	free(bfText);
 	delete cmd;
 	shell->bf = prev;
 	shell->echo = echo;
 	}
 
-bool BatchFile::ReadLine(char * line)
+bool BatchFile::ReadLine(char *line)
 	{
-	if (!DOS_OpenFile(filename.c_str(), 128, &file_handle))			// Open the batchfile and seek to stored postion
+	for (char *bfPtr = bfText+location; *bfPtr; bfPtr++)
 		{
-		delete this;
-		return false;
-		}
-	DOS_SeekFile(file_handle, &(this->location), DOS_SEEK_SET);
-emptyline:
-	Bit8u c;
-	Bit16u n;
-	char * cmd_write = line;
-	do
-		{
-		n = 1;
-		DOS_ReadFile(file_handle, &c, &n);
-		if (n > 0)
-			*cmd_write++ = c;
-		}
-	while (c != '\n' && n);
-	*cmd_write = 0;
-	if (!n && cmd_write == line)
-		{
-		DOS_CloseFile(file_handle);									// Close file and delete batchfile
-		delete this;
-		return false;	
-		}
-	if (*line == 0 || *line == ':')
-		goto emptyline;
-
-	this->location = 0;												// Store current location and close bat file
-	DOS_SeekFile(file_handle, &(this->location), DOS_SEEK_CUR);
-	DOS_CloseFile(file_handle);
-	return true;	
-	}
-
-bool BatchFile::Goto(char * where)
-	{
-	// Open bat file and search for the where string
-	if (!DOS_OpenFile(filename.c_str(), 128, &file_handle))
-		{
-		LOG(LOG_MISC,LOG_ERROR)("SHELL:Goto Can't open BatchFile %s", filename.c_str());
-		delete this;
-		return false;
-		}
-
-	char cmd_buffer[CMD_MAXLINE];
-	char * cmd_write;
-
-	// Scan till we have a match or return false
-	Bit8u c;
-	Bit16u n;
-again:
-	cmd_write = cmd_buffer;
-	do
-		{
-		n = 1;
-		DOS_ReadFile(file_handle, &c, &n);
-		if (n > 0 && c > 31)
-			*cmd_write++ = c;
-		}
-		while (c != '\n' && n);
-	*cmd_write++ = 0;
-	char *nospace = lrTrim(cmd_buffer);
-	if (nospace[0] == ':')
-		{
-		nospace++;		// Skip :
-		// Strip spaces and = from it.
-		while (isspace(*nospace) || (*nospace == '='))
-			nospace++;
-		// label is until space/=/eol
-		char* const beginlabel = nospace;
-		while (*nospace && !isspace(*nospace) && (*nospace != '=')) 
-			nospace++;
-
-		*nospace = 0;
-		if (stricmp(beginlabel, where) == 0)
+		char *lineStart = bfPtr;
+		while (*bfPtr == ' ' || *bfPtr == 9)										// Skip leading spaces
+			bfPtr++;
+		char *charStart = bfPtr;
+		while (*bfPtr && *bfPtr != '\n')
+			bfPtr++;
+		if (*charStart == ':')														// Assume label
+			continue;
+		if (bfPtr != charStart)
 			{
-			// Found it! Store location and continue
-			this->location = 0;
-			DOS_SeekFile(file_handle, &(this->location), DOS_SEEK_CUR);
-			DOS_CloseFile(file_handle);
-			return true;
+			strncpy(line, lineStart, bfPtr-lineStart);
+			line[bfPtr-lineStart] = 0;												// Add end-of-string
+			while (*bfPtr == '\n')
+				bfPtr++;
+			location = bfPtr-bfText;												// Store current location and close bat file
+			return true;	
 			}
 		}
-	if (n)
-		goto again;
-	DOS_CloseFile(file_handle);
+	delete this;
+	return false;	
+	}
+
+bool BatchFile::Goto(char *label)
+	{
+	for (char *bfPtr = bfText; *bfPtr;)
+		{
+		char *lineStart = bfPtr;
+		while (*bfPtr == ' ' || *bfPtr == 9)										// Skip leading white-space in line
+			bfPtr++;
+		if (*bfPtr == ':')															// Labels start with ':'
+			{
+			bfPtr++;																// Skip ':'
+			while (*bfPtr == ' ' || *bfPtr == 9 || *bfPtr == '=')					// Skip spaces and '='
+				bfPtr++;
+			int lblLen = strlen(label);
+			if (!strnicmp(bfPtr, label, lblLen))									// First part matches
+				if (strchr(" \t\n", bfPtr[lblLen]))									// Ends with white-space, EOL, EOF?
+					{																// Found
+					this->location = lineStart-bfText;
+					return true;
+					}
+			}
+		while (*bfPtr && *bfPtr != '\n')											// Skip to next line
+			bfPtr++;
+		while (*bfPtr == '\n')
+			bfPtr++;
+		}
 	delete this;
 	return false;	
 	}

@@ -2,7 +2,6 @@
 #include "shell.h"
 #include "callback.h"
 #include "regs.h"
-#include "../dos/drives.h"
 #include "../src/ints/int10.h"
 #include "support.h"
 #include <vector>
@@ -204,7 +203,9 @@ void DOS_Shell::CMD_MEM(char * args)
 			WriteOut(MSG_Get("MEM:UPPER1"), (total*16+112)/1024);					// Round numebers
 		else
 			WriteOut(MSG_Get("MEM:UPPER2"), (total*16+112)/1024, count, (largest*16+112)/1024);
-	if (!XMS_QueryFreeMemory(largest))												// Show free XMS
+	if (TotEXTMB != 0)																// Show free extended (actually total, don't like to go into the trouble of getting free)	
+		WriteOut(MSG_Get("MEM:EXT"), TotEXTMB*1024);
+	if (TotXMSMB != 0 && !XMS_QueryFreeMemory(largest))								// Show free XMS
 		WriteOut(MSG_Get("MEM:XMS"), largest);
 	largest = EMS_FreeKBs();														// Show free EMS
 	if (largest)
@@ -219,7 +220,7 @@ void DOS_Shell::CMD_USE(char *args)
 		WriteOut(MSG_Get("USE:MOUNTED"));
 		for (int d = 0; d < DOS_DRIVES; d++)
 			if (Drives[d])
-				WriteOut("%c: => %s\n", d+'A', Drives[d]->GetInfo());
+				WriteOut("%c: => %s\n", d+'A', Drives[d]->GetWinDir());
 		return;
 		}
 	if (strlen(args) < 2 || !isalpha(*args) || args[1] != ':')
@@ -227,21 +228,35 @@ void DOS_Shell::CMD_USE(char *args)
 		WriteOut(MSG_Get("INVALID_DRIVE"), args);
 		return;
 		}
-	char label[] = " _DRIVE";
-	label[0] = toupper(*args);
-	Bit8u driveNo = label[0]-'A';
+	char driveLtr =  toupper(*args);
+	Bit8u driveNo = driveLtr-'A';
 	char* rem = lTrim(args+2);
 	if (!strlen(rem))
 		{
 		if (Drives[driveNo])
-			WriteOut("%c: => %s\n", label[0], Drives[driveNo]->GetInfo());
+			WriteOut("%c: => %s\n", driveLtr, Drives[driveNo]->GetWinDir());
 		else
 			WriteOut(MSG_Get("MISSING_PARAMETER"));
 		return;
 		}
-	if (Drives[driveNo])
+
+	bool changeBootDir = false;														// C: can be changed once
+	char winDirCur[512];															// Initially C: is set to Windows work directory
+	GetCurrentDirectory(512, winDirCur);											// No subdir has to be selected
+	if (winDirCur[strlen(winDirCur)-1] != '\\')										// No files opened on C:
+		strcat(winDirCur, "\\");
+	if (driveNo == 2 && !*Drives[2]->curdir && !strcmp(winDirCur, Drives[2]->basedir))
 		{
-		WriteOut(MSG_Get("USE:ALREADY_USED"), label[0]);
+		changeBootDir = true;
+		for (Bit8u handle = 0; handle < DOS_FILES; handle++)
+			if (Files[handle])
+				if (Files[handle]->GetDrive() == 2)
+					changeBootDir = false;
+		}
+
+	if (Drives[driveNo] && !changeBootDir)
+		{
+		WriteOut(MSG_Get("USE:ALREADY_USED"), driveLtr);
 		return;
 		}
 	while (strlen(rem) > 1 && *rem == '"' && rem[strlen(rem)-1] == '"')				// Surrounding by "'s not needed/wanted
@@ -258,25 +273,11 @@ void DOS_Shell::CMD_USE(char *args)
 		int attr = GetFileAttributes(pathBuf);
 		if (attr != INVALID_FILE_ATTRIBUTES && (attr&FILE_ATTRIBUTE_DIRECTORY))
 			{
-			if (pathBuf[strlen(pathBuf)-1] != '\\')
-				strcat(pathBuf, "\\");
-			DOS_Drive *newdrive = new localDrive(pathBuf, label);
-			if (!newdrive)
-				{
-				WriteOut(MSG_Get("USE:ERROR"), label[0], pathBuf);
-				return;
-				}
-			Drives[driveNo] = newdrive;
-			Mem_Stosb(dWord2Ptr(dos.tables.mediaid)+driveNo*2, 0xF8);				// Set the correct media byte in the table (harddisk)
-			newdrive->remote = true;
-			if (pathBuf[0] != '\\')													// Assume \\... is remote
-				{
-				char * firstDel = strchr(pathBuf+2, '\\');
-				firstDel[1] = 0;
-				if (!(GetDriveType(pathBuf)&DRIVE_REMOTE))
-					newdrive->remote = false;
-				}
-			WriteOut("%c => %s\n", label[0], newdrive->GetInfo());
+			if (changeBootDir)
+				Drives[2]->SetBaseDir(pathBuf);
+			else
+				Drives[driveNo] = new DOS_Drive(pathBuf, driveNo);
+			WriteOut("%c => %s\n", driveLtr, Drives[driveNo]->GetWinDir());
 			return;
 			}
 		}
@@ -843,8 +844,8 @@ void DOS_Shell::CMD_COPY(char * args)
 							Bit16u toCopy = 0x8000;
 							do
 								{
-								DOS_ReadFile(sourceHandle, tempBuff32K, &toCopy);
-								DOS_WriteFile(targetHandle, tempBuff32K, &toCopy);
+								DOS_ReadFile(sourceHandle, dos_copybuf, &toCopy);
+								DOS_WriteFile(targetHandle, dos_copybuf, &toCopy);
 								}
 							while (toCopy == 0x8000);
 							DOS_CloseFile(sourceHandle);

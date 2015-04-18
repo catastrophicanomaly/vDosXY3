@@ -26,13 +26,13 @@ public:
 	virtual bool ReadLine(char * line);
 	bool Goto(char * where);
 	void Shift(void);
-	Bit16u file_handle;
 	Bit32u location;
+	char *bfText;
+	int bfSize;
 	bool echo;
 	DOS_Shell * shell;
 	BatchFile * prev;
 	CommandLine * cmd;
-	std::string filename;
 	};
 
 class DOS_Shell : public Program

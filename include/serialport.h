@@ -7,9 +7,6 @@
 #ifndef vDOS_INOUT_H
 #include "inout.h"
 #endif
-#ifndef vDOS_TIMER_H
-#include "timer.h"
-#endif
 
 #include "devicePRT.h"
 

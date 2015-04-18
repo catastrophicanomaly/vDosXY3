@@ -15,25 +15,14 @@ CPU_Regs cpu_regs;
 CPUBlock cpu;
 Segments Segs;
 
-Bit32s CPU_Cycles =			0;
-Bit32s CPU_CycleLeft =		CPU_CycleMax;
 CPU_Decoder * cpudecoder;
 
 #define CPU_CHECK_IGNORE 1
-
-/* In debug mode exceptions are tested and vDos exits when 
- * a unhandled exception state is detected. 
- * USE CHECK_EXCEPT to raise an exception in that case to see if that exception
- * solves the problem.
- * 
- * In non-debug mode vDos doesn't do detection (and hence doesn't crash at
- * that point). (game might crash later due to the unhandled exception) */
 
 #if defined(CPU_CHECK_IGNORE)
 #define CPU_CHECK_COND(cond, msg, exc, sel) {	\
 	if (cond) do {} while (0);					\
 }
-//#define CPU_CHECK_COND(cond, msg, exc, sel) {}
 #elif defined(CPU_CHECK_EXCEPT)
 #define CPU_CHECK_COND(cond,msg,exc,sel) {	\
 	if (cond) {					\
@@ -77,14 +66,14 @@ void CPU_Push32(Bitu value)
 
 Bitu CPU_Pop16(void)
 	{
-	Bitu val = Mem_Lodsw(SegPhys(ss) + (reg_esp & cpu.stack.mask));
+	Bitu val = Mem_Lodsw(SegPhys(ss)+(reg_esp&cpu.stack.mask));
 	reg_esp = (reg_esp&cpu.stack.notmask)|((reg_esp+2)&cpu.stack.mask);
 	return val;
 	}
 
 Bitu CPU_Pop32(void)
 	{
-	Bitu val = Mem_Lodsd(SegPhys(ss) + (reg_esp & cpu.stack.mask));
+	Bitu val = Mem_Lodsd(SegPhys(ss)+(reg_esp&cpu.stack.mask));
 	reg_esp = (reg_esp&cpu.stack.notmask)|((reg_esp+4)&cpu.stack.mask);
 	return val;
 	}
@@ -230,11 +219,6 @@ public:
 		{
 		return valid;
 		}
-	Bitu Get_back(void)
-		{
-		Bit16u backlink = Mem_Lodsw(base);
-		return backlink;
-		}
 	void SaveSelector(void)
 		{
 		cpu.gdt.SetDescriptor(selector, desc);
@@ -295,9 +279,6 @@ public:
 	};
 
 TaskStateSegment cpu_tss;
-
-enum TSwitchType
-{ TSwitch_JMP, TSwitch_CALL_INT, TSwitch_IRET };
 
 bool CPU_IO_Exception(Bitu port, Bitu size)
 	{
@@ -485,7 +466,7 @@ do_interrupt:
 	}
 
 
-void CPU_IRET(bool use32, Bitu oldeip)
+void CPU_IRET(bool use32)
 	{
 	if (!cpu.pmode)
 		{					// RealMode IRET
@@ -637,7 +618,7 @@ void CPU_IRET(bool use32, Bitu oldeip)
 	}
 
 
-void CPU_JMP(bool use32, Bitu selector, Bitu offset/*, Bitu oldeip*/)
+void CPU_JMP(bool use32, Bitu selector, Bitu offset)
 	{
 	if (!cpu.pmode)
 		{
@@ -884,7 +865,7 @@ call_code:
 		}
 	}
 
-void CPU_RET(bool use32, Bitu bytes, Bitu oldeip)
+void CPU_RET(bool use32, Bitu bytes)
 	{
 	if (!cpu.pmode)
 		{
@@ -1037,7 +1018,6 @@ RET_same_level:
 			reg_sp = (n_esp & 0xffff)+bytes;
 			}
 		CPU_CheckSegments();
-//		LOG(LOG_MISC,LOG_ERROR)("RET - Higher level to %X:%X RPL %X DPL %X",selector,offset,rpl,desc.DPL());
 		return;
 		}
 	return;
@@ -1051,10 +1031,7 @@ Bitu CPU_SLDT(void)
 bool CPU_LLDT(Bitu selector)
 	{
 	if (!cpu.gdt.LLDT(selector))
-		{
-		LOG(LOG_CPU, LOG_ERROR)("LLDT failed, selector=%X", selector);
 		return true;
-		}
 	return false;
 	}
 
@@ -1496,11 +1473,10 @@ bool CPU_SetSegGeneral(SegNames seg, Bitu value)
 		if ((value & 0xfffc) == 0)
 			E_Exit("CPU_SetSegGeneral: Stack segment zero");
 		Descriptor desc;
-		if (!cpu.gdt.GetDescriptor(value,desc))
+		if (!cpu.gdt.GetDescriptor(value, desc))
 			E_Exit("CPU_SetSegGeneral: Stack segment beyond limits");
 		if (((value & 3) != cpu.cpl) || (desc.DPL() != cpu.cpl))
 			E_Exit("CPU_SetSegGeneral: Stack segment with invalid privileges");
-
 		switch (desc.Type())
 			{
 		case DESC_DATA_EU_RW_NA:	case DESC_DATA_EU_RW_A:
@@ -1529,7 +1505,7 @@ bool CPU_SetSegGeneral(SegNames seg, Bitu value)
 		}
 	else
 		{
-		if ((value & 0xfffc) == 0)
+		if ((value&0xfffc) == 0)
 			{
 			Segs.val[seg] = value;
 			Segs.phys[seg] = 0;	// ??
@@ -1545,7 +1521,7 @@ bool CPU_SetSegGeneral(SegNames seg, Bitu value)
 		case DESC_DATA_ED_RO_NA:	case DESC_DATA_ED_RO_A:
 		case DESC_DATA_ED_RW_NA:	case DESC_DATA_ED_RW_A:
 		case DESC_CODE_R_NC_A:		case DESC_CODE_R_NC_NA:
-			if (((value & 3) > desc.DPL()) || (cpu.cpl > desc.DPL()))		// extreme pinball
+			if (((value&3) > desc.DPL()) || (cpu.cpl > desc.DPL()))		// extreme pinball
 				return CPU_PrepareException(EXCEPTION_GP,value & 0xfffc);
 			break;
 		case DESC_CODE_R_C_A:		case DESC_CODE_R_C_NA:
@@ -1553,7 +1529,7 @@ bool CPU_SetSegGeneral(SegNames seg, Bitu value)
 		default:
 			// gabriel knight
 			return CPU_PrepareException(EXCEPTION_GP, value & 0xfffc);
-		}
+			}
 		if (!desc.saved.seg.p)			// win
 			return CPU_PrepareException(EXCEPTION_NP,value & 0xfffc);
 		Segs.val[seg] = value;
@@ -1569,11 +1545,6 @@ bool CPU_PopSeg(SegNames seg, bool use32)
 		return true;
 	Bitu addsp = use32 ? 0x04 : 0x02;
 	reg_esp = (reg_esp&cpu.stack.notmask)|((reg_esp+addsp)&cpu.stack.mask);
-	return false;
-	}
-
-bool CPU_CPUID(void)
-	{
 	return false;
 	}
 

@@ -4,12 +4,10 @@
 #include "mem.h"
 #include "vga.h"
 #include "paging.h"
-#include "pic.h"
 #include "inout.h"
 #include "cpu.h"
 
-
-static Bit32u RasterOp(Bit32u input, Bit32u mask)
+__forceinline Bit32u RasterOp(Bit32u input, Bit32u mask)
 	{
 	if (vga.config.raster_op == 0)													// None
 		return (input&mask)|(vga.latch.d&~mask);
@@ -20,7 +18,7 @@ static Bit32u RasterOp(Bit32u input, Bit32u mask)
 	return (input|~mask)&vga.latch.d;												// AND
 	}
 
-static Bit32u ModeOperation(Bit8u val)
+__forceinline Bit32u ModeOperation(Bit8u val)
 	{
 	switch (vga.config.write_mode)
 		{
@@ -83,7 +81,7 @@ protected:
 public:
 	VGA_UnchainedEGA_Handler()
 		{
-		flags = PFLAG_NOCODE;
+		flags = 0;
 		}
 	Bit8u readb(PhysPt addr)
 		{

@@ -102,7 +102,6 @@ bool DOS_IOCTL(void)
 		return true;
 		}
 	case 0x0b:																		// Set sharing retry count
-LOG_MSG("DOS_IOCTL, set retry, pause: %d, retries: %d", reg_cx, reg_dx);
 		return true;
 	case 0x0e:																		// Get logical drive map
 		reg_al = 0;																	// Only 1 logical drive assigned

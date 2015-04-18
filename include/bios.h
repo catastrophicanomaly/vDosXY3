@@ -93,8 +93,11 @@ void BIOS_AddKey(Bit8u scancode, Bit16u unicode, Bit16u symcode, bool pressed);
 void Rudimentary_int09_handler(Bit8u scancode);
 #endif
 bool BIOS_CheckKey(Bit16u &code);
+bool BIOS_GetKey(Bit16u &code);
 
 void BIOS_SetComPorts (Bit16u baseaddr[]);
 void BIOS_SetLPTPort (Bitu port, Bit16u baseaddr);
+
+bool BIOS_HostTimeSync(void);
 
 #endif

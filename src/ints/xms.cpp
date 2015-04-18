@@ -72,7 +72,7 @@ Bit16u XMS_Defrag(Bit16u maxHandle)													// Defrag XMS memory, maximize s
 		if (!xms_handles[i].free)
 			sortedHandles[numHandles++] = i;
 	if (!numHandles)															// If no handles in use, return all XMS memory as free
-		return TOT_MEM_BYTES/1024-1024;
+		return TotXMSMB*1024;
 
 	for (int i = 0; i < numHandles-1; i++)										// Sort the handles in order of memory address
 		for (int j = 0; j < numHandles-1-i; j++)
@@ -96,7 +96,7 @@ Bit16u XMS_Defrag(Bit16u maxHandle)													// Defrag XMS memory, maximize s
 		if (sortedHandles[i] == maxHandle)
 			break;
 		}
-	Bit32u highAddr = TOT_MEM_BYTES;
+	Bit32u highAddr = TotMemBytes;
 	if (maxHandle)
 		for (int i = numHandles-1; i; i--)										// Defrag all beyond maxHandle compacting down from end
 			{
@@ -131,7 +131,8 @@ Bit8u XMS_AllocateMemory(Bit16u size, Bit16u& handle)
 	if (freeSpace < size)
 		return XMS_OUT_OF_SPACE;
 	XMS_Handle * handlePtr = &xms_handles[index];
-	handlePtr->addr = (TOT_MEM_KB-freeSpace)*1024;									// After XMS_Defrag(0) blocks are compacted down
+	handlePtr->addr = (TotMemMB*1024-freeSpace)*1024;								// After XMS_Defrag(0) blocks are compacted down
+	Mem_Stosd(handlePtr->addr, 0);
 	handlePtr->size = size;
 	handlePtr->free = false;
 	handlePtr->locked = 0;
@@ -316,13 +317,16 @@ Bitu XMS_Handler(void)
 
 void XMS_Init()
 	{
-	xms_callback = SegOff2dWord(DOS_GetPrivatMemory(0x1)-1, 0x10);					// Place hookable callback in writable memory area
-	Bitu cbID = CALLBACK_Allocate();
-	CALLBACK_Setup(cbID, &XMS_Handler, CB_HOOKABLE, dWord2Ptr(xms_callback));		// XMS Handler
+	if (TotXMSMB)																	// If XMS set
+		{
+		xms_callback = SegOff2dWord(DOS_GetPrivatMemory(0x1)-1, 0x10);				// Place hookable callback in writable memory area
+		Bitu cbID = CALLBACK_Allocate();
+		CALLBACK_Setup(cbID, &XMS_Handler, CB_HOOKABLE, dWord2Ptr(xms_callback));	// XMS Handler
 
-	xms_handles[0].free	= false;													// Disable the 0 handle
-	for (Bitu i = 1; i < XMS_HANDLES; i++)											// The rest is free to use
-		xms_handles[i].free = true;
+		xms_handles[0].free	= false;												// Disable the 0 handle
+		for (Bitu i = 1; i < XMS_HANDLES; i++)										// The rest is free to use
+			xms_handles[i].free = true;
 
-	DOS_BuildUMBChain(ConfGetBool("ems"));											// Set up UMB chain
+		}
+	DOS_BuildUMBChain();															// Set up UMB chain (w/o XMS?)
 	}

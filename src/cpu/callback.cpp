@@ -11,7 +11,7 @@
 
 CallBack_Handler CallBack_Handlers[CB_MAX];
 
-static Bitu call_stop, call_default;
+static Bitu call_stop;
 
 static Bitu illegal_handler(void)
 	{
@@ -27,8 +27,6 @@ void CALLBACK_Idle(void)
 	Bit16u oldcs = SegValue(cs);
 	Bit32u oldeip = reg_eip;
 	SegSet16(cs, CB_SEG);
-//	reg_eip = call_idle*CB_SIZE;				// This is wrong in DosBox 0.74
-//	reg_eip = CB_SOFFSET+call_idle*CB_SIZE;
 	reg_eip = CB_SOFFSET+call_stop*CB_SIZE;
 	RunPC();
 	reg_eip = oldeip;
@@ -38,16 +36,10 @@ void CALLBACK_Idle(void)
 		CPU_Cycles = 0;
 	}
 
-static Bitu default_handler(void)
-	{
-	return CBRET_NONE;
-	}
-
 static Bitu stop_handler(void)
 	{
 	return CBRET_STOP;
 	}
-
 
 // This way to execute only the INT in a RunPC() and stop
 void CALLBACK_RunRealInt(Bit8u intnum)
@@ -63,32 +55,29 @@ void CALLBACK_RunRealInt(Bit8u intnum)
 
 void CALLBACK_SZF(bool val)
 	{
-	Bit16u tempf = Mem_Lodsw(SegPhys(ss)+reg_sp+4); 
+	PhysPt addrFlags = SegPhys(ss)+reg_sp+4;
+	Bit16u tempFlags = Mem_Lodsw(addrFlags);
 	if (val)
-		tempf |= FLAG_ZF; 
+		tempFlags |= FLAG_ZF;
 	else
-		tempf &= ~FLAG_ZF; 
-	Mem_Stosw(SegPhys(ss)+reg_sp+4, tempf); 
+		tempFlags &= ~FLAG_ZF;
+	Mem_Stosw(addrFlags, tempFlags); 
 	}
 
 void CALLBACK_SCF(bool val)
 	{
-	Bit16u tempf = Mem_Lodsw(SegPhys(ss)+reg_sp+4); 
+	PhysPt addrFlags = SegPhys(ss)+reg_sp+4;
+	Bit16u tempFlags = Mem_Lodsw(addrFlags);
 	if (val)
-		tempf |= FLAG_CF; 
+		tempFlags |= FLAG_CF;
 	else
-		tempf &= ~FLAG_CF; 
-	Mem_Stosw(SegPhys(ss)+reg_sp+4, tempf); 
+		tempFlags &= ~FLAG_CF;
+	Mem_Stosw(addrFlags, tempFlags); 
 	}
 
-void CALLBACK_SIF(bool val)
+void CALLBACK_SetupDummyIRET(Bit8u intno)
 	{
-	Bit16u tempf = Mem_Lodsw(SegPhys(ss)+reg_sp+4); 
-	if (val)
-		tempf |= FLAG_IF; 
-	else
-		tempf &= ~FLAG_IF; 
-	Mem_Stosw(SegPhys(ss)+reg_sp+4, tempf); 
+	Mem_Stosd(intno*4, SegOff2dWord(CB_SEG, CB_SOFFSET));
 	}
 
 void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
@@ -110,24 +99,21 @@ void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
 		Mem_aStosw(physAddress+1, 0x38FE);											// GRP 4 + Extra Callback instruction
 		Mem_aStosw(physAddress+3, callback);										// The immediate word
 		Mem_aStosb(physAddress+5, 0xCF);											// IRET
+		Mem_aStosb(physAddress+6, 0xCB);											// RETF (only needed for EXEC)
+		Mem_aStosb(physAddress+7, 0xCF);											// IRET
 		break;
 	case CB_IRET_EOI_PIC1:
-		Mem_aStosb(physAddress+0, 0x50);											// push ax
-		Mem_aStosw(physAddress+1, 0x20b0);											// mov al, 0x20
-		Mem_aStosw(physAddress+3, 0x20e6);											// out 0x20, al
-		Mem_aStosw(physAddress+5, 0xcf58);											// pop ax + IRET
+		Mem_aStosb(physAddress, 0xCF);												// IRET
 		break;
 	case CB_IRQ0:																	// Timer int8
-		Mem_aStosw(physAddress+0, 0x38FE);											// GRP 4 + Extra Callback instruction
-		Mem_aStosw(physAddress+2, callback);										// The immediate word
-		Mem_aStosw(physAddress+4, 0x5250);											// push ax + push dx
-		Mem_aStosb(physAddress+6, 0x1e);											// push ds
-		Mem_aStosw(physAddress+7, 0x1ccd);											// int 1c
-		Mem_aStosb(physAddress+9, 0xfa);											// cli
-		Mem_aStosw(physAddress+10, 0x5a1f);											// pop ds + pop dx
-		Mem_aStosw(physAddress+12, 0x20b0);											// mov al, 0x20
-		Mem_aStosw(physAddress+14, 0x20e6);											// out 0x20, al
-		Mem_aStosw(physAddress+16, 0xcf58);											// pop ax + IRET
+		Mem_aStosw(physAddress+0, 0x5250);											// push ax + push dx
+		Mem_aStosb(physAddress+2, 0x1e);											// push ds
+		Mem_aStosw(physAddress+3, 0x1ccd);											// int 1c
+		Mem_aStosb(physAddress+5, 0xfa);											// cli
+		Mem_aStosw(physAddress+6, 0x5a1f);											// pop ds + pop dx
+		Mem_aStosw(physAddress+8, 0x20b0);											// mov al, 0x20
+		Mem_aStosw(physAddress+10, 0x20e6);											// out 0x20, al
+		Mem_aStosw(physAddress+12, 0xcf58);											// pop ax + IRET
 		break;
 #ifdef WITHIRQ1 
 	case CB_IRQ1:	// keyboard int9
@@ -150,7 +136,7 @@ void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
 
 		break;
 #endif
-	case CB_IRQ9:																	// Pic cascade interrupt
+/*	case CB_IRQ9:																	// Pic cascade interrupt
 		Mem_aStosb(physAddress+0, 0x50);											// push ax
 		Mem_aStosw(physAddress+1, 0x61b0);											// mov al, 0x61
 		Mem_aStosw(physAddress+3, 0xa0e6);											// out 0xa0, al
@@ -158,7 +144,7 @@ void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
 		Mem_aStosw(physAddress+7, 0x58fa);											// cli + pop ax
 		Mem_aStosb(physAddress+9, 0xcf);											// IRET
 		break;
-	case CB_IRQ12:																	// PS2 mouse int74
+*/	case CB_IRQ12:																	// PS2 mouse int74
 		Mem_aStosw(physAddress+0, 0xfcfb);											// STI + CLD
 		Mem_aStosw(physAddress+2, 0x061e);											// push ds + push es
 		Mem_aStosw(physAddress+4, 0x6066);											// pushad
@@ -177,14 +163,12 @@ void CALLBACK_SetupExtra(Bitu callback, Bitu type, PhysPt physAddress)
 		Mem_aStosw(physAddress+9, 0x585b);											// pop bx + pop ax
 		Mem_aStosb(physAddress+11, 0xcf);											// IRET
 		break;
-	case CB_INT16:
+	case CB_INT16:																	// Keyboard
 		Mem_aStosb(physAddress+0, 0xFB);											// STI
 		Mem_aStosw(physAddress+1, 0x38FE);											// GRP 4 + Extra Callback instruction
 		Mem_aStosw(physAddress+3, callback);										// The immediate word
 		Mem_aStosb(physAddress+5, 0xCF);											// IRET
-		for (int i = 0; i <= 11; i++)
-			Mem_aStosb(physAddress+6+i, 0x90);										// NOP's if INT 16 doesn't return
-		Mem_aStosw(physAddress+18, 0xedeb);											// JMP callback
+		Mem_aStosw(physAddress+6, 0xF9eb);											// JMP callback
 		break;
 	case CB_HOOKABLE:
 		Mem_aStosw(physAddress+0, 0x03eb);											// jump near + offset
@@ -228,20 +212,18 @@ void CALLBACK_Init()
 	for (Bitu i = 0; i < CB_MAX; i++)
 		CallBack_Handlers[i] = &illegal_handler;
 
+	Mem_aStosb(CALLBACK_GetBase(), 0xCF);											// Setup dummy (IRET) at first entry
+
 	call_stop = CALLBACK_Allocate();												// Setup the Stop handler
 	CallBack_Handlers[call_stop] = stop_handler;
 	Mem_aStosw(CALLBACK_PhysPointer(call_stop)+0, 0x38FE);							// GRP 4 + Extra callback instruction
 	Mem_aStosw(CALLBACK_PhysPointer(call_stop)+2, (Bit16u)call_stop);
 
-	// Default handlers for unhandled interrupts that have to be non-null
-	call_default = CALLBACK_Allocate();
-	CALLBACK_Setup(call_default, &default_handler, CB_IRET);						// Default
-   
-	// Only setup default handler for first part of interrupt table
-	for (Bit16u ct = 0; ct < 0x60; ct++)
-		Mem_Stosd(ct*4, CALLBACK_RealPointer(call_default));
-	for (Bit16u ct = 0x68; ct < 0x70; ct++)
-		Mem_Stosd(ct*4, CALLBACK_RealPointer(call_default));
+	// Only setup dummy handler for first part of interrupt table
+	for (Bit8u ct = 0; ct < 0x60; ct++)
+		CALLBACK_SetupDummyIRET(ct);
+	for (Bit8u ct = 0x68; ct < 0x70; ct++)
+		CALLBACK_SetupDummyIRET(ct);
 
 	// Setup block of 0xCD 0xxx instructions
 	PhysPt rint_base = CALLBACK_GetBase()+CB_MAX*CB_SIZE;

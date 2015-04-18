@@ -30,10 +30,10 @@ static inline Bit32s Fetchds()
 	continue;													\
 }
 
-#define EXCEPTION(blah)										\
-	{														\
-		CPU_Exception(blah);								\
-		continue;											\
+#define EXCEPTION(blah)								\
+	{												\
+	CPU_Exception(blah);							\
+	continue;										\
 	}
 
 //TODO Could probably make all byte operands fast?
@@ -65,6 +65,43 @@ static inline Bit32s Fetchds()
 	continue;										\
 }
 
+/*
+#define JumpCond16_b(COND)							\
+	{												\
+	CPU_Cycles++;									\
+	if (COND)										\
+		reg_ip += Fetchbs();						\
+	reg_ip += 2;									\
+	continue;										\
+	}
+
+#define JumpCond16_w(COND)							\
+	{												\
+	CPU_Cycles++;									\
+	if (COND)										\
+		reg_ip += Fetchws();						\
+	reg_ip += 4;									\
+	continue;										\
+	}
+
+#define JumpCond32_b(COND)							\
+	{												\
+	CPU_Cycles++;									\
+	if (COND)										\
+		reg_eip += Fetchbs();						\
+	reg_eip += 2;									\
+	continue;										\
+	}
+
+#define JumpCond32_d(COND)							\
+	{												\
+	CPU_Cycles++;									\
+	if (COND)										\
+		reg_eip += Fetchds();						\
+	reg_eip += 6;									\
+	continue;										\
+	}
+*/
 
 #define SETcc(cc)									\
 	{												\
@@ -72,7 +109,22 @@ static inline Bit32s Fetchds()
 	if (rm >= 0xc0 ) {GetEArb;*earb=(cc) ? 1 : 0;}	\
 	else {GetEAa;Mem_Stosb(eaa,(cc) ? 1 : 0);}		\
 	}
-
+/*
+#define SETcc(cc)									\
+	{												\
+	GetRM;											\
+	if (rm >= 0xc0)									\
+		{											\
+		GetEArb;									\
+		*earb = cc;									\
+		}											\
+	else											\
+		{											\
+		GetEAa;										\
+		Mem_Stosb(eaa, cc);							\
+		}											\
+	}
+*/
 #include "helpers.h"
 #include "table_ea.h"
 #include "../modrm.h"

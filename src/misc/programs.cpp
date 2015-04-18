@@ -17,28 +17,23 @@ static Bit8u exe_block[]={
 	0xcd, 0x21,																		// Int 0x21
 };
 
-static std::vector<PROGRAMS_Main*> internal_progs;
+static PROGRAMS_Main* ComSpec;
 
-void PROGRAMS_MakeFile(char const * const name, PROGRAMS_Main * main)
+void PROGRAMS_ComSpecData(Bit8u *header)
 	{
-	Bit8u * comdata = (Bit8u *)malloc(32);											// MEM LEAK
-	memcpy(comdata, &exe_block, sizeof(exe_block));
+	memmove(header, exe_block, sizeof(exe_block));
+	}
 
-	// Copy the pointer in the vector and save it's index
-	comdata[sizeof(exe_block)] = (Bit8u)internal_progs.size();
-	internal_progs.push_back(main);
-	VFILE_Register(name, comdata, sizeof(exe_block)+1);
+void PROGRAMS_MakeFile(PROGRAMS_Main * main)
+	{
+	ComSpec = main;
 	}
 
 static Bitu PROGRAMS_Handler(void)
 	{
 	// This sets up everything for a program start up call
-	Bit8u index = Mem_Lodsb(SegOff2Ptr(dos.psp(), 256+sizeof(exe_block)));			// Read the index from program code in memory
-	if (index > internal_progs.size())
-		E_Exit("Something is messing with the memory");
 	Program * new_program;
-	PROGRAMS_Main * handler = internal_progs[index];
-	(*handler)(&new_program);
+	(*ComSpec)(&new_program);
 	new_program->Run();
 	delete new_program;
 	return CBRET_NONE;

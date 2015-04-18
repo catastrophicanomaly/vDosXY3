@@ -46,10 +46,10 @@
     <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\bin\Release\</OutDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\bin\Release\</IntDir>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\SDL_ttf-2.0.11\include;..\SDL-1.2.15\include;$(IncludePath)</IncludePath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\SDL_ttf-2.0.11\lib\x86;..\SDL-1.2.15\lib\x86;$(LibraryPath)</LibraryPath>
-    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\SDL-1.2.15\include;..\SDL_ttf-2.0.11\include;$(IncludePath)</IncludePath>
-    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\SDL-1.2.15\lib\x86;..\SDL_ttf-2.0.11\lib\x86;$(LibraryPath)</LibraryPath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\SDL-1.2.15\include;$(IncludePath)</IncludePath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\ft255\lib\x86;..\SDL-1.2.15\lib\x86;$(LibraryPath)</LibraryPath>
+    <IncludePath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\SDL-1.2.15\include;$(IncludePath)</IncludePath>
+    <LibraryPath Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\SDL-1.2.15\lib\x86;..\ft255\lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Midl>
@@ -76,7 +76,7 @@
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <OmitFramePointers>true</OmitFramePointers>
+      <OmitFramePointers>false</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
     </ClCompile>
@@ -85,7 +85,7 @@
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>winmm.lib;sdl.lib;sdlmain.lib;SDL_ttf.lib;ShlwApi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winmm.lib;sdl.lib;sdlmain.lib;ShlwApi.lib;freetype255.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>.\Debug/vdos.pdb</ProgramDatabaseFile>
@@ -96,6 +96,9 @@
       <TargetMachine>MachineX86</TargetMachine>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <FixedBaseAddress>false</FixedBaseAddress>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
+      <IgnoreSpecificDefaultLibraries>MSVCRT;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -105,12 +108,12 @@
       </HeaderFileName>
     </Midl>
     <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
+      <Optimization>Full</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
-      <AdditionalIncludeDirectories>..\SDL-1.2.15\lib\x86;../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\vDos\ft255\lib\x86;../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;WITHIRQ1;BEEP;SFN83;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -129,13 +132,14 @@
       <CompileAs>Default</CompileAs>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Culture>0x0409</Culture>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>winmm.lib;sdl.lib;sdlmain.lib;SDL_ttf.lib;ShlwApi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>winmm.lib;sdl.lib;sdlmain.lib;ShlwApi.lib;freetype255.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>false</GenerateDebugInformation>
@@ -151,12 +155,17 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <ShowProgress>NotSet</ShowProgress>
       <AdditionalOptions>/OPT:REF  /LTCG %(AdditionalOptions)</AdditionalOptions>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
       <Command>cmd /c copy $(TargetDir)vDos.exe $(TargetDir)..\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\dos\devicePRT.cpp" />
+    <ClCompile Include="..\src\gui\freetype.cpp" />
+    <ClCompile Include="..\src\hardware\parport.cpp" />
+    <ClCompile Include="..\src\hardware\serialport.cpp" />
     <ClCompile Include="..\src\ints\ems.cpp" />
     <ClCompile Include="..\src\vdos.cpp" />
     <ClCompile Include="..\src\cpu\callback.cpp" />
@@ -167,7 +176,6 @@
     <ClCompile Include="..\src\hardware\iohandler.cpp" />
     <ClCompile Include="..\src\hardware\keyboard.cpp" />
     <ClCompile Include="..\src\hardware\memory.cpp" />
-    <ClCompile Include="..\src\hardware\parport\devicePRT.cpp" />
     <ClCompile Include="..\src\hardware\pic.cpp" />
     <ClCompile Include="..\src\hardware\timer.cpp" />
     <ClCompile Include="..\src\hardware\vga.cpp" />
@@ -179,8 +187,6 @@
     <ClCompile Include="..\src\hardware\vga_memory.cpp" />
     <ClCompile Include="..\src\hardware\vga_misc.cpp" />
     <ClCompile Include="..\src\hardware\vga_seq.cpp" />
-    <ClCompile Include="..\src\hardware\serialport\serialport.cpp" />
-    <ClCompile Include="..\src\hardware\parport\parport.cpp" />
     <ClCompile Include="..\src\gui\render.cpp" />
     <ClCompile Include="..\src\gui\sdlmain.cpp" />
     <ClCompile Include="..\src\ints\bios.cpp" />
@@ -211,8 +217,6 @@
     <ClCompile Include="..\src\dos\dos_memory.cpp" />
     <ClCompile Include="..\src\dos\dos_misc.cpp" />
     <ClCompile Include="..\src\dos\dos_tables.cpp" />
-    <ClCompile Include="..\src\dos\drive_local.cpp" />
-    <ClCompile Include="..\src\dos\drive_virtual.cpp" />
     <ClCompile Include="..\src\dos\drives.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -221,6 +225,7 @@
   <ItemGroup>
     <ClInclude Include="..\include\config.h" />
     <ClInclude Include="..\include\devicePRT.h" />
+    <ClInclude Include="..\include\ttf.h" />
     <ClInclude Include="..\include\vDosTTF.h" />
     <ClInclude Include="..\src\cpu\instructions.h" />
     <ClInclude Include="..\src\cpu\lazyflags.h" />
@@ -238,7 +243,6 @@
     <ClInclude Include="..\src\platform\visualc\config.h" />
     <ClInclude Include="..\src\platform\visualc\unistd.h" />
     <ClInclude Include="..\src\dos\dev_con.h" />
-    <ClInclude Include="..\src\dos\drives.h" />
     <ClInclude Include="..\include\bios.h" />
     <ClInclude Include="..\include\callback.h" />
     <ClInclude Include="..\include\cpu.h" />
@@ -251,14 +255,12 @@
     <ClInclude Include="..\include\mouse.h" />
     <ClInclude Include="..\include\paging.h" />
     <ClInclude Include="..\include\parport.h" />
-    <ClInclude Include="..\include\pic.h" />
     <ClInclude Include="..\include\programs.h" />
     <ClInclude Include="..\include\regs.h" />
     <ClInclude Include="..\include\render.h" />
     <ClInclude Include="..\include\serialport.h" />
     <ClInclude Include="..\include\shell.h" />
     <ClInclude Include="..\include\support.h" />
-    <ClInclude Include="..\include\timer.h" />
     <ClInclude Include="..\include\vga.h" />
     <ClInclude Include="..\include\video.h" />
     <ClInclude Include="..\src\resource.h" />

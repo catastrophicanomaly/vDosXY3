@@ -1,7 +1,6 @@
 #include "vDos.h"
 #include "cpu.h"
 #include "lazyflags.h"
-#include "pic.h"
 
 LazyFlags lflags;
 

@@ -27,7 +27,7 @@
 #ifndef _SDL_stdinc_h
 #define _SDL_stdinc_h
 
-#include "SDL_config.h"
+#include "SDL_config_win32.h"
 
 
 #ifdef HAVE_SYS_TYPES_H

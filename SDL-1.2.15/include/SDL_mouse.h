@@ -28,7 +28,7 @@
 #define _SDL_mouse_h
 
 #include "SDL_stdinc.h"
-#include "SDL_error.h"
+//#include "SDL_error.h"
 #include "SDL_video.h"
 
 #include "begin_code.h"
