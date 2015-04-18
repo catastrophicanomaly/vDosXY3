@@ -101,8 +101,9 @@ void RunPC(void)
 						}
 					}
 #ifdef WITHIRQ1
-				else if (kbPending)
+				else if (kbPending && Mem_Lodsb(4 * 9 + 3) != 0xf0)
 					{
+						
 						kbPending = false;
 						keyb_req = false;
 						ISR = 2;

@@ -1160,7 +1160,7 @@ void GFX_Events()
 				break;
 				}
 #ifdef WITHIRQ1
-			if (!useIrq1)
+			if (!useIrq1 || Mem_Lodsb(4 * 9 + 3) == 0xf0)
 			{
 #endif
 				if (event.key.keysym.mod & 3)												// Shifted dead keys reported as unshifted
@@ -1206,7 +1206,7 @@ void GFX_Events()
 			if (event.key.keysym.sym >= SDLK_KP0 && event.key.keysym.sym <= SDLK_KP9 && event.key.keysym.mod&(KMOD_LSHIF|KMOD_RSHIFT) && !(event.key.keysym.mod&SDLK_NUMLOCK))
 				event.key.keysym.unicode = event.key.keysym.sym - SDLK_KP0 + 48;	// Why aren't these reported as Unicode?
 #ifdef WITHIRQ1
-			if (useIrq1)
+			if (useIrq1 && Mem_Lodsb(4 * 9 + 3) != 0xf0)
 				KEYBOARD_AddKey(event.key.keysym.sym, event.type == SDL_KEYDOWN);
 			else
 #endif
