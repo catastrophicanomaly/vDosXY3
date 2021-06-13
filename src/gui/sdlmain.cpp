@@ -1134,7 +1134,7 @@ void GFX_Events()
 				event.key.keysym.scancode = 29;										// Need to repair this after intercepting the 'C' of [Win][Ctr]+C
 
 			// [Win][Ctrl]+V pastes clipboard into keyboard buffer
-			if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == 47 && (event.key.keysym.mod&KMOD_CTRL) && (event.key.keysym.mod & KMOD_ALT))
+			if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == 47  && (event.key.keysym.mod&KMOD_CTRL)  && (event.key.keysym.mod & KMOD_ALT))
 				{
 				getClipboard();
 				screendump = true;
